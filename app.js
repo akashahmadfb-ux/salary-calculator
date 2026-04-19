@@ -5,6 +5,7 @@
 
 const STORAGE_KEY     = 'tracsApparel_v2';
 const STORAGE_KEY_OLD = 'garmentEMS_v1';
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function defaultData() {
   return { companyName: 'TRACS APPAREL', employees: [], salaryRecords: [], attendance: {} };
@@ -284,7 +285,7 @@ const app = {
     document.getElementById('stat-total-employees').textContent    = data.employees.length;
     document.getElementById('stat-this-month-payroll').textContent = fmt(recs.reduce((s, r) => s + r.totalSalary, 0));
     document.getElementById('stat-today-attendance').textContent   = `P: ${presentCount} | A: ${absentCount}`;
-    document.getElementById('stat-week-ot').textContent            = `${weekOt.toLocaleString('en-US', { maximumFractionDigits: 2 })} hrs`;
+    document.getElementById('stat-week-ot').textContent            = `${weekOt.toLocaleString('en-US', { maximumFractionDigits: 2 })} hours`;
 
     const recent = [...data.salaryRecords].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
     const tbody  = document.getElementById('recent-entries-tbody');
@@ -1037,7 +1038,7 @@ const app = {
           const overlapStart = monthStart > start ? monthStart : start;
           const overlapEnd   = monthEnd < end ? monthEnd : end;
           if (overlapStart > overlapEnd) return;
-          const overlapDays = Math.floor((overlapEnd - overlapStart) / 86400000) + 1;
+          const overlapDays = Math.floor((overlapEnd - overlapStart) / MILLISECONDS_PER_DAY) + 1;
           const factor = overlapDays / daysInMonth;
           salary += (r.totalSalary || 0) * factor;
           ot += (r.otHours || 0) * factor;

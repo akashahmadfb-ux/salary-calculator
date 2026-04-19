@@ -49,8 +49,12 @@ function getDaysInMonth(monthStr) {
   return new Date(y, m, 0).getDate();
 }
 
-function toISODate(date) {
+function formatAsYYYYMMDD(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function dateStringToMidnight(dateStr) {
+  return new Date(`${dateStr}T00:00:00`);
 }
 
 function monthFromDate(dateStr) {
@@ -106,6 +110,10 @@ function fmtMonth(ms) {
   const names = ['January','February','March','April','May','June',
                  'July','August','September','October','November','December'];
   return names[parseInt(m, 10) - 1] + ' ' + y;
+}
+
+function formatOtHours(hours) {
+  return (parseFloat(hours) || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
 function getLast6Months() {
@@ -179,7 +187,7 @@ const app = {
 
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const today = toISODate(now);
+    const today = formatAsYYYYMMDD(now);
     document.getElementById('se-month').value      = thisMonth;
     document.getElementById('summary-month').value = thisMonth;
     document.getElementById('att-man-month').value = thisMonth;
@@ -261,7 +269,7 @@ const app = {
     const data = loadData();
     const now  = new Date();
     const tm   = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const today = toISODate(now);
+    const today = formatAsYYYYMMDD(now);
     const recs = data.salaryRecords.filter(r => r.month === tm);
     const weekStart = new Date(now);
     weekStart.setDate(now.getDate() - now.getDay());
@@ -285,7 +293,7 @@ const app = {
     document.getElementById('stat-total-employees').textContent    = data.employees.length;
     document.getElementById('stat-this-month-payroll').textContent = fmt(recs.reduce((s, r) => s + r.totalSalary, 0));
     document.getElementById('stat-today-attendance').textContent   = `P: ${presentCount} | A: ${absentCount}`;
-    document.getElementById('stat-week-ot').textContent            = `${weekOt.toLocaleString('en-US', { maximumFractionDigits: 2 })} hours`;
+    document.getElementById('stat-week-ot').textContent            = `${formatOtHours(weekOt)} hours`;
 
     const recent = [...data.salaryRecords].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
     const tbody  = document.getElementById('recent-entries-tbody');
@@ -978,7 +986,7 @@ const app = {
     const period = document.getElementById('pr-period').value;
     const startEl = document.getElementById('pr-start-date');
     const endEl   = document.getElementById('pr-end-date');
-    const base = startEl.value ? new Date(startEl.value + 'T00:00:00') : new Date();
+    const base = startEl.value ? dateStringToMidnight(startEl.value) : new Date();
     let start = new Date(base);
     let end   = new Date(base);
 
@@ -993,8 +1001,8 @@ const app = {
       end   = new Date(base.getFullYear(), base.getMonth() + 1, 0);
     }
 
-    startEl.value = toISODate(start);
-    endEl.value   = toISODate(end);
+    startEl.value = formatAsYYYYMMDD(start);
+    endEl.value   = formatAsYYYYMMDD(end);
   },
 
   loadPayrollReport() {
@@ -1005,8 +1013,8 @@ const app = {
     const tfoot    = document.getElementById('pr-tfoot');
     if (!startStr || !endStr) { showToast('Select start and end dates!', 'error'); return; }
 
-    const start = new Date(startStr + 'T00:00:00');
-    const end   = new Date(endStr + 'T00:00:00');
+    const start = dateStringToMidnight(startStr);
+    const end   = dateStringToMidnight(endStr);
     if (start > end) { showToast('Start date must be before end date!', 'error'); return; }
 
     if (!data.employees.length) {
@@ -1022,7 +1030,7 @@ const app = {
       let p = 0, a = 0, h = 0, salary = 0, ot = 0;
 
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const dateStr = toISODate(d);
+        const dateStr = formatAsYYYYMMDD(d);
         const status = getAttendanceStatus(data, emp.id, dateStr);
         if (status === 'A') a++;
         else if (status === 'H') h++;
@@ -1033,8 +1041,8 @@ const app = {
         .filter(r => r.employeeId === emp.id)
         .forEach(r => {
           const daysInMonth = getDaysInMonth(r.month);
-          const monthStart = new Date(`${r.month}-01T00:00:00`);
-          const monthEnd   = new Date(`${r.month}-${String(daysInMonth).padStart(2, '0')}T00:00:00`);
+          const monthStart = dateStringToMidnight(`${r.month}-01`);
+          const monthEnd   = dateStringToMidnight(`${r.month}-${String(daysInMonth).padStart(2, '0')}`);
           const overlapStart = monthStart > start ? monthStart : start;
           const overlapEnd   = monthEnd < end ? monthEnd : end;
           if (overlapStart > overlapEnd) return;
@@ -1056,7 +1064,7 @@ const app = {
         <td>${p}</td>
         <td>${a}</td>
         <td>${h}</td>
-        <td>${ot.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+        <td>${formatOtHours(ot)}</td>
         <td class="amount-positive"><strong>${fmt(salary)}</strong></td>
       </tr>`;
     });
@@ -1067,7 +1075,7 @@ const app = {
       <td><strong>${totalP}</strong></td>
       <td><strong>${totalA}</strong></td>
       <td><strong>${totalH}</strong></td>
-      <td><strong>${totalOt.toLocaleString('en-US', { maximumFractionDigits: 2 })}</strong></td>
+      <td><strong>${formatOtHours(totalOt)}</strong></td>
       <td class="amount-positive"><strong>${fmt(totalSalary)}</strong></td>
     </tr>`;
 

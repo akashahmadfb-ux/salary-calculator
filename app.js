@@ -5,6 +5,8 @@
 
 const STORAGE_KEY     = 'tracsApparel_v2';
 const STORAGE_KEY_OLD = 'garmentEMS_v1';
+const MS_PER_DAY      = 86400000;
+const OT_RATE_FACTOR  = 0.5 / 100;
 
 function defaultData() {
   return { companyName: 'TRACS APPAREL', employees: [], salaryRecords: [], attendance: {} };
@@ -48,8 +50,51 @@ function getDaysInMonth(monthStr) {
   return new Date(y, m, 0).getDate();
 }
 
+function formatAsYYYYMMDD(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function dateStringToMidnight(dateStr) {
+  return new Date(`${dateStr}T00:00:00`);
+}
+
+function daysBetweenInclusive(startDate, endDate) {
+  const startUTC = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const endUTC   = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  return Math.floor((endUTC - startUTC) / MS_PER_DAY) + 1;
+}
+
+function monthFromDate(dateStr) {
+  return (dateStr || '').slice(0, 7);
+}
+
+function dayFromDate(dateStr) {
+  const day = parseInt((dateStr || '').slice(8, 10), 10);
+  return Number.isFinite(day) ? day : 0;
+}
+
+function getAttendanceStatus(data, empId, dateStr) {
+  if (!empId || !dateStr) return 'P';
+  const month = monthFromDate(dateStr);
+  const day   = dayFromDate(dateStr);
+  if (!month || !day) return 'P';
+  const key = `${empId}|${month}`;
+  return ((data.attendance || {})[key] || {})[day] || 'P';
+}
+
+function setAttendanceStatus(data, empId, dateStr, status) {
+  if (!empId || !dateStr) return;
+  const month = monthFromDate(dateStr);
+  const day   = dayFromDate(dateStr);
+  if (!month || !day) return;
+  if (!data.attendance) data.attendance = {};
+  const key = `${empId}|${month}`;
+  if (!data.attendance[key]) data.attendance[key] = {};
+  data.attendance[key][day] = status;
+}
+
 function calcSalary(basic, otHours, bonus, festivalBonus, absentDays, daysInMonth, deductions, advance) {
-  const otAmount        = otHours * (basic * 0.5 / 100);
+  const otAmount        = otHours * (basic * OT_RATE_FACTOR);
   const absentDeduction = daysInMonth > 0 ? (basic / daysInMonth) * absentDays : 0;
   const total           = Math.max(0, basic + otAmount + bonus + festivalBonus - absentDeduction - deductions - advance);
   return { otAmount, absentDeduction, total };
@@ -73,6 +118,10 @@ function fmtMonth(ms) {
   const names = ['January','February','March','April','May','June',
                  'July','August','September','October','November','December'];
   return names[parseInt(m, 10) - 1] + ' ' + y;
+}
+
+function formatOtHours(hours) {
+  return (parseFloat(hours) || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
 function getLast6Months() {
@@ -136,6 +185,7 @@ const app = {
   _tempAttendance:  {},
   _attEmpId:        null,
   _attMonth:        null,
+  _attMgmtDate:     null,
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
 
@@ -145,8 +195,12 @@ const app = {
 
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const today = formatAsYYYYMMDD(now);
     document.getElementById('se-month').value      = thisMonth;
     document.getElementById('summary-month').value = thisMonth;
+    document.getElementById('att-man-month').value = thisMonth;
+    document.getElementById('att-man-date').value  = today;
+    this._attMgmtDate = today;
 
     // Company name
     const data = loadData();
@@ -198,8 +252,10 @@ const app = {
       dashboard:         'Dashboard',
       employees:         'Employees',
       'salary-entry':    'Salary Entry',
+      attendance:        'Attendance',
       history:           'History',
       'monthly-summary': 'Monthly Summary',
+      'payroll-reports': 'Payroll Reports',
     };
     document.getElementById('pageTitle').textContent = titles[view] || view;
 
@@ -209,8 +265,10 @@ const app = {
     if (view === 'dashboard')       this.renderDashboard();
     if (view === 'employees')       this.renderEmployees();
     if (view === 'salary-entry')    this.loadSalaryEntrySelects();
+    if (view === 'attendance')      this.renderAttendanceManagement();
     if (view === 'history')         this.renderHistory();
     if (view === 'monthly-summary') { /* user clicks Load */ }
+    if (view === 'payroll-reports') this.renderPayrollReports();
   },
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
@@ -219,12 +277,31 @@ const app = {
     const data = loadData();
     const now  = new Date();
     const tm   = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const today = formatAsYYYYMMDD(now);
     const recs = data.salaryRecords.filter(r => r.month === tm);
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    let presentCount = 0;
+    let absentCount = 0;
+    data.employees.forEach(emp => {
+      const st = getAttendanceStatus(data, emp.id, today);
+      if (st === 'A') absentCount++;
+      else presentCount++;
+    });
+
+    const weekOt = data.salaryRecords
+      .filter(r => r.createdAt && r.createdAt >= weekStart.getTime() && r.createdAt <= weekEnd.getTime())
+      .reduce((s, r) => s + (r.otHours || 0), 0);
 
     document.getElementById('stat-total-employees').textContent    = data.employees.length;
     document.getElementById('stat-this-month-payroll').textContent = fmt(recs.reduce((s, r) => s + r.totalSalary, 0));
-    document.getElementById('stat-ot-hours').textContent           = recs.reduce((s, r) => s + r.otHours, 0);
-    document.getElementById('stat-salary-records').textContent     = data.salaryRecords.length;
+    document.getElementById('stat-today-attendance').textContent   = `P: ${presentCount} | A: ${absentCount}`;
+    document.getElementById('stat-week-ot').textContent            = `${formatOtHours(weekOt)} hours`;
 
     const recent = [...data.salaryRecords].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
     const tbody  = document.getElementById('recent-entries-tbody');
@@ -482,6 +559,8 @@ const app = {
     saveData(data);
     this.closeEmployeeModal();
     this.renderEmployees();
+    this.renderAttendanceManagement();
+    this.renderPayrollReports();
   },
 
   confirmDeleteEmployee(id) {
@@ -504,6 +583,8 @@ const app = {
     saveData(data);
     this.closeConfirmModal();
     this.renderEmployees();
+    this.renderAttendanceManagement();
+    this.renderPayrollReports();
     showToast('Employee deleted!');
   },
 
@@ -695,6 +776,7 @@ const app = {
 
     saveData(data);
     this.resetSalaryForm();
+    this.renderPayrollReports();
   },
 
   resetSalaryForm() {
@@ -797,11 +879,222 @@ const app = {
     this.calcPreview();
 
     this.closeAttendanceModal();
+    this.renderAttendanceManagement();
+    this.renderPayrollReports();
     showToast('Attendance saved!');
   },
 
   closeAttendanceModal() {
     document.getElementById('attendanceModal').classList.remove('show');
+  },
+
+  // ── Attendance Management View ───────────────────────────────────────────────
+
+  renderAttendanceManagement() {
+    const data = loadData();
+    const monthInput = document.getElementById('att-man-month');
+    const dateInput  = document.getElementById('att-man-date');
+    if (!monthInput || !dateInput) return;
+
+    if (!monthInput.value) {
+      const now = new Date();
+      monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    const activeMonth = monthInput.value;
+    if (!dateInput.value || monthFromDate(dateInput.value) !== activeMonth) {
+      dateInput.value = `${activeMonth}-01`;
+    }
+    this._attMgmtDate = dateInput.value;
+    this._renderAttendanceManagementRows(data);
+  },
+
+  onAttendanceMonthChange() {
+    const month = document.getElementById('att-man-month').value;
+    const dateEl = document.getElementById('att-man-date');
+    if (!month || !dateEl) return;
+    const days = getDaysInMonth(month);
+    let day = dayFromDate(dateEl.value) || 1;
+    day = Math.min(Math.max(day, 1), days);
+    dateEl.value = `${month}-${String(day).padStart(2, '0')}`;
+    this._attMgmtDate = dateEl.value;
+    this.renderAttendanceManagement();
+  },
+
+  onAttendanceDateChange() {
+    const dateEl  = document.getElementById('att-man-date');
+    const monthEl = document.getElementById('att-man-month');
+    if (!dateEl || !monthEl || !dateEl.value) return;
+    monthEl.value = monthFromDate(dateEl.value);
+    this._attMgmtDate = dateEl.value;
+    this.renderAttendanceManagement();
+  },
+
+  _renderAttendanceManagementRows(data) {
+    const dateStr = this._attMgmtDate || document.getElementById('att-man-date').value;
+    const tbody = document.getElementById('attendance-list-tbody');
+    if (!tbody) return;
+
+    if (!data.employees.length) {
+      tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No employees found</td></tr>';
+      document.getElementById('att-man-p').textContent = '0';
+      document.getElementById('att-man-a').textContent = '0';
+      document.getElementById('att-man-h').textContent = '0';
+      return;
+    }
+
+    let p = 0, a = 0, h = 0;
+    tbody.innerHTML = data.employees.map(emp => {
+      const status = getAttendanceStatus(data, emp.id, dateStr);
+      if (status === 'A') a++;
+      else if (status === 'H') h++;
+      else p++;
+      return `<tr>
+        <td>${esc(emp.name)}</td>
+        <td>${esc(emp.id)}</td>
+        <td>
+          <select class="att-status-select" onchange="app.setAttendanceForDate('${esc(emp.id)}', this.value)">
+            <option value="P" ${status === 'P' ? 'selected' : ''}>Present</option>
+            <option value="A" ${status === 'A' ? 'selected' : ''}>Absent</option>
+            <option value="H" ${status === 'H' ? 'selected' : ''}>Company Holiday</option>
+          </select>
+        </td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('att-man-p').textContent = p;
+    document.getElementById('att-man-a').textContent = a;
+    document.getElementById('att-man-h').textContent = h;
+  },
+
+  setAttendanceForDate(empId, status) {
+    const data = loadData();
+    const dateStr = document.getElementById('att-man-date').value;
+    setAttendanceStatus(data, empId, dateStr, status);
+    saveData(data);
+    this._attMgmtDate = dateStr;
+    this._renderAttendanceManagementRows(data);
+    this._syncAbsentDays();
+    this.calcPreview();
+    this.renderDashboard();
+    this.renderPayrollReports();
+  },
+
+  // ── Payroll Reports ──────────────────────────────────────────────────────────
+
+  renderPayrollReports() {
+    const periodEl = document.getElementById('pr-period');
+    const startEl  = document.getElementById('pr-start-date');
+    const endEl    = document.getElementById('pr-end-date');
+    if (!periodEl || !startEl || !endEl) return;
+    if (!startEl.value || !endEl.value) this.onPayrollPeriodChange();
+  },
+
+  onPayrollPeriodChange() {
+    const period = document.getElementById('pr-period').value;
+    const startEl = document.getElementById('pr-start-date');
+    const endEl   = document.getElementById('pr-end-date');
+    const base = startEl.value ? dateStringToMidnight(startEl.value) : new Date();
+    let start = new Date(base);
+    let end   = new Date(base);
+
+    if (period === 'daily') {
+      // start/end stay same day
+    } else if (period === 'weekly') {
+      start.setDate(base.getDate() - base.getDay());
+      end = new Date(start);
+      end.setDate(start.getDate() + 6);
+    } else {
+      start = new Date(base.getFullYear(), base.getMonth(), 1);
+      end   = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+    }
+
+    startEl.value = formatAsYYYYMMDD(start);
+    endEl.value   = formatAsYYYYMMDD(end);
+  },
+
+  loadPayrollReport() {
+    const data     = loadData();
+    const startStr = document.getElementById('pr-start-date').value;
+    const endStr   = document.getElementById('pr-end-date').value;
+    const tbody    = document.getElementById('pr-tbody');
+    const tfoot    = document.getElementById('pr-tfoot');
+    if (!startStr || !endStr) { showToast('Select start and end dates!', 'error'); return; }
+
+    const start = dateStringToMidnight(startStr);
+    const end   = dateStringToMidnight(endStr);
+    if (start > end) { showToast('Start date must be before end date!', 'error'); return; }
+
+    if (!data.employees.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No employees found</td></tr>';
+      tfoot.innerHTML = '';
+      document.getElementById('pr-total-attendance').textContent = '0 / 0 / 0';
+      document.getElementById('pr-total-salary').textContent = fmt(0);
+      return;
+    }
+
+    const salaryRecordsByEmployee = data.salaryRecords.reduce((acc, record) => {
+      if (!acc[record.employeeId]) acc[record.employeeId] = [];
+      acc[record.employeeId].push(record);
+      return acc;
+    }, {});
+
+    let totalP = 0, totalA = 0, totalH = 0, totalOt = 0, totalSalary = 0;
+    const rows = data.employees.map(emp => {
+      let p = 0, a = 0, h = 0, salary = 0, ot = 0;
+
+      const startUTC = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+      const endUTC   = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate());
+      for (let ts = startUTC; ts <= endUTC; ts += MS_PER_DAY) {
+        const dateStr = formatAsYYYYMMDD(new Date(ts));
+        const status = getAttendanceStatus(data, emp.id, dateStr);
+        if (status === 'A') a++;
+        else if (status === 'H') h++;
+        else p++;
+      }
+
+      (salaryRecordsByEmployee[emp.id] || []).forEach(r => {
+          const daysInMonth = getDaysInMonth(r.month);
+          const monthStart = dateStringToMidnight(`${r.month}-01`);
+          const monthEnd   = dateStringToMidnight(`${r.month}-${String(daysInMonth).padStart(2, '0')}`);
+          const overlapStart = monthStart > start ? monthStart : start;
+          const overlapEnd   = monthEnd < end ? monthEnd : end;
+          if (overlapStart > overlapEnd) return;
+          const overlapDays = daysBetweenInclusive(overlapStart, overlapEnd);
+          const factor = overlapDays / daysInMonth;
+          salary += (r.totalSalary || 0) * factor;
+          ot += (r.otHours || 0) * factor;
+        });
+
+      totalP += p;
+      totalA += a;
+      totalH += h;
+      totalOt += ot;
+      totalSalary += salary;
+
+      return `<tr>
+        <td>${esc(emp.name)}</td>
+        <td>${esc(emp.id)}</td>
+        <td>${p}</td>
+        <td>${a}</td>
+        <td>${h}</td>
+        <td>${formatOtHours(ot)}</td>
+        <td class="amount-positive"><strong>${fmt(salary)}</strong></td>
+      </tr>`;
+    });
+
+    tbody.innerHTML = rows.join('');
+    tfoot.innerHTML = `<tr>
+      <td colspan="2"><strong>TOTALS (${data.employees.length} employees)</strong></td>
+      <td><strong>${totalP}</strong></td>
+      <td><strong>${totalA}</strong></td>
+      <td><strong>${totalH}</strong></td>
+      <td><strong>${formatOtHours(totalOt)}</strong></td>
+      <td class="amount-positive"><strong>${fmt(totalSalary)}</strong></td>
+    </tr>`;
+
+    document.getElementById('pr-total-attendance').textContent = `${totalP} / ${totalA} / ${totalH}`;
+    document.getElementById('pr-total-salary').textContent = fmt(totalSalary);
   },
 
   // ── History ─────────────────────────────────────────────────────────────────

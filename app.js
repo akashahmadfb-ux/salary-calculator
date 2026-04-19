@@ -5,7 +5,6 @@
 
 const STORAGE_KEY     = 'tracsApparel_v2';
 const STORAGE_KEY_OLD = 'garmentEMS_v1';
-const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function defaultData() {
   return { companyName: 'TRACS APPAREL', employees: [], salaryRecords: [], attendance: {} };
@@ -55,6 +54,12 @@ function formatAsYYYYMMDD(date) {
 
 function dateStringToMidnight(dateStr) {
   return new Date(`${dateStr}T00:00:00`);
+}
+
+function daysBetweenInclusive(startDate, endDate) {
+  const startUTC = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const endUTC   = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  return Math.floor((endUTC - startUTC) / 86400000) + 1;
 }
 
 function monthFromDate(dateStr) {
@@ -1046,7 +1051,7 @@ const app = {
           const overlapStart = monthStart > start ? monthStart : start;
           const overlapEnd   = monthEnd < end ? monthEnd : end;
           if (overlapStart > overlapEnd) return;
-          const overlapDays = Math.floor((overlapEnd - overlapStart) / MILLISECONDS_PER_DAY) + 1;
+          const overlapDays = daysBetweenInclusive(overlapStart, overlapEnd);
           const factor = overlapDays / daysInMonth;
           salary += (r.totalSalary || 0) * factor;
           ot += (r.otHours || 0) * factor;

@@ -6,7 +6,7 @@
 const STORAGE_KEY     = 'tracsApparel_v2';
 const STORAGE_KEY_OLD = 'garmentEMS_v1';
 const MS_PER_DAY      = 86400000;
-const OT_RATE_MULTIPLIER = 0.5 / 100;
+const OT_RATE_FACTOR  = 0.5 / 100;
 
 function defaultData() {
   return { companyName: 'TRACS APPAREL', employees: [], salaryRecords: [], attendance: {} };
@@ -69,7 +69,8 @@ function monthFromDate(dateStr) {
 }
 
 function dayFromDate(dateStr) {
-  return parseInt((dateStr || '').slice(8, 10), 10);
+  const day = parseInt((dateStr || '').slice(8, 10), 10);
+  return Number.isFinite(day) ? day : 0;
 }
 
 function getAttendanceStatus(data, empId, dateStr) {
@@ -93,7 +94,7 @@ function setAttendanceStatus(data, empId, dateStr, status) {
 }
 
 function calcSalary(basic, otHours, bonus, festivalBonus, absentDays, daysInMonth, deductions, advance) {
-  const otAmount        = otHours * (basic * OT_RATE_MULTIPLIER);
+  const otAmount        = otHours * (basic * OT_RATE_FACTOR);
   const absentDeduction = daysInMonth > 0 ? (basic / daysInMonth) * absentDays : 0;
   const total           = Math.max(0, basic + otAmount + bonus + festivalBonus - absentDeduction - deductions - advance);
   return { otAmount, absentDeduction, total };
@@ -1032,6 +1033,12 @@ const app = {
       return;
     }
 
+    const salaryRecordsByEmployee = data.salaryRecords.reduce((acc, record) => {
+      if (!acc[record.employeeId]) acc[record.employeeId] = [];
+      acc[record.employeeId].push(record);
+      return acc;
+    }, {});
+
     let totalP = 0, totalA = 0, totalH = 0, totalOt = 0, totalSalary = 0;
     const rows = data.employees.map(emp => {
       let p = 0, a = 0, h = 0, salary = 0, ot = 0;
@@ -1046,9 +1053,7 @@ const app = {
         else p++;
       }
 
-      data.salaryRecords
-        .filter(r => r.employeeId === emp.id)
-        .forEach(r => {
+      (salaryRecordsByEmployee[emp.id] || []).forEach(r => {
           const daysInMonth = getDaysInMonth(r.month);
           const monthStart = dateStringToMidnight(`${r.month}-01`);
           const monthEnd   = dateStringToMidnight(`${r.month}-${String(daysInMonth).padStart(2, '0')}`);

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Garment EMS — Employee Management System</title>
+  <title>TRACS APPAREL Management Web App</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
         crossorigin="anonymous" referrerpolicy="no-referrer">
@@ -23,8 +23,9 @@
     <div class="sidebar-header">
       <div class="brand">
         <i class="fas fa-tshirt"></i>
-        <span>Garment EMS</span>
+        <span>TRACS APPAREL</span>
       </div>
+      <div class="brand-sub">Management Web App</div>
     </div>
 
     <nav class="sidebar-nav">
@@ -48,7 +49,7 @@
     <div class="sidebar-footer">
       <input class="company-name-input" id="companyNameInput" type="text"
              placeholder="Company name for PDFs" title="Company name used in PDF headers">
-      <div class="version">Garment EMS v1.0.0</div>
+      <div class="version">TRACS APPAREL v2.0</div>
     </div>
   </aside>
 
@@ -91,6 +92,17 @@
             <h3 id="stat-salary-records">0</h3>
             <p>Total Salary Records</p>
           </div>
+        </div>
+      </div>
+
+      <!-- 6-Month Chart -->
+      <div class="card chart-card">
+        <div class="card-header">
+          <h2><i class="fas fa-chart-bar" style="margin-right:6px;color:var(--primary)"></i>6-Month Payroll Overview</h2>
+          <span class="chart-subtitle">Total Salary Payout vs Present Workers</span>
+        </div>
+        <div class="chart-container">
+          <canvas id="dashboardChart"></canvas>
         </div>
       </div>
 
@@ -169,7 +181,7 @@
             </div>
             <div class="form-group">
               <label>Month *</label>
-              <input type="month" id="se-month" required>
+              <input type="month" id="se-month" required onchange="app.onMonthChange()">
             </div>
             <div class="form-group">
               <label>Basic Salary</label>
@@ -181,17 +193,35 @@
                      oninput="app.calcPreview()">
             </div>
             <div class="form-group">
-              <label>Bonus</label>
+              <label>Regular Bonus</label>
               <input type="number" id="se-bonus" min="0" value="0" oninput="app.calcPreview()">
             </div>
             <div class="form-group">
-              <label>Deductions</label>
+              <label>Festival Bonus</label>
+              <input type="number" id="se-festival-bonus" min="0" value="0" oninput="app.calcPreview()">
+            </div>
+            <div class="form-group">
+              <label>Other Deductions</label>
               <input type="number" id="se-deductions" min="0" value="0" oninput="app.calcPreview()">
             </div>
             <div class="form-group">
               <label>Advance</label>
               <input type="number" id="se-advance" min="0" value="0" oninput="app.calcPreview()">
             </div>
+          </div>
+
+          <!-- Attendance row -->
+          <input type="hidden" id="se-absent-days" value="0">
+          <div class="attendance-row">
+            <div class="att-info">
+              <i class="fas fa-calendar-check"></i>
+              <span>Absent Days: <strong id="att-absent-count">0</strong></span>
+              <span class="att-month-days" id="att-month-days"></span>
+            </div>
+            <button type="button" class="btn btn-secondary" id="markAttBtn"
+                    onclick="app.openAttendanceModal()">
+              <i class="fas fa-calendar-alt"></i> Mark Attendance
+            </button>
           </div>
 
           <!-- Live calculation preview -->
@@ -205,10 +235,16 @@
                 <span>OT Amount</span><span id="prev-ot">&#2547;0</span>
               </div>
               <div class="preview-item">
-                <span>Bonus</span><span id="prev-bonus">&#2547;0</span>
+                <span>Regular Bonus</span><span id="prev-bonus">&#2547;0</span>
+              </div>
+              <div class="preview-item">
+                <span>Festival Bonus</span><span id="prev-festival-bonus">&#2547;0</span>
               </div>
               <div class="preview-item deduction">
-                <span>Deductions</span><span id="prev-deductions">&#2547;0</span>
+                <span>Absent Deduction</span><span id="prev-absent-ded">&#2547;0</span>
+              </div>
+              <div class="preview-item deduction">
+                <span>Other Deductions</span><span id="prev-deductions">&#2547;0</span>
               </div>
               <div class="preview-item deduction">
                 <span>Advance</span><span id="prev-advance">&#2547;0</span>
@@ -217,8 +253,9 @@
                 <span>NET TOTAL</span><span id="prev-total">&#2547;0</span>
               </div>
             </div>
-            <p style="margin-top:10px;font-size:11px;color:var(--text-secondary)">
-              Formula: Basic + (OT Hours &times; Basic &times; 0.5 / 100) + Bonus &minus; Deductions &minus; Advance
+            <p class="formula-note">
+              Formula: Basic + (OT Hrs &times; Basic &times; 0.5/100) + Regular Bonus + Festival Bonus
+              &minus; (Basic / Days in Month &times; Absent Days) &minus; Other Deductions &minus; Advance
             </p>
           </div>
 
@@ -259,6 +296,9 @@
                 <th>OT Hrs</th>
                 <th>OT Amt</th>
                 <th>Bonus</th>
+                <th>Fest. Bonus</th>
+                <th>Absent Days</th>
+                <th>Absent Ded.</th>
                 <th>Deductions</th>
                 <th>Advance</th>
                 <th>Net Salary</th>
@@ -266,7 +306,7 @@
               </tr>
             </thead>
             <tbody id="history-tbody">
-              <tr><td colspan="11" class="empty-state">No records found</td></tr>
+              <tr><td colspan="14" class="empty-state">No records found</td></tr>
             </tbody>
           </table>
         </div>
@@ -299,14 +339,15 @@
                 <th>OT Hrs</th>
                 <th>OT Amt</th>
                 <th>Bonus</th>
-                <th>Deductions</th>
-                <th>Advance</th>
+                <th>Fest. Bonus</th>
+                <th>Absent Days</th>
+                <th>Total Deduction</th>
                 <th>Net Salary</th>
                 <th>Slip</th>
               </tr>
             </thead>
             <tbody id="summary-tbody">
-              <tr><td colspan="11" class="empty-state">Select a month and click Load</td></tr>
+              <tr><td colspan="12" class="empty-state">Select a month and click Load</td></tr>
             </tbody>
             <tfoot id="summary-tfoot"></tfoot>
           </table>
@@ -396,12 +437,86 @@
     </div>
   </div>
 
+  <!-- ─── Attendance Modal ──────────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="attendanceModal" role="dialog" aria-modal="true">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h2 id="attModalTitle">Mark Attendance</h2>
+        <button class="modal-close" onclick="app.closeAttendanceModal()" aria-label="Close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="att-legend">
+          <span class="att-badge att-p-badge">P = Present</span>
+          <span class="att-badge att-a-badge">A = Absent</span>
+          <span class="att-badge att-h-badge">H = Holiday (Paid)</span>
+          <small>Click a day cell to cycle its status</small>
+        </div>
+        <div class="att-weekdays">
+          <span>Sun</span><span>Mon</span><span>Tue</span>
+          <span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+        </div>
+        <div class="att-grid" id="attGrid"></div>
+        <div class="att-summary" id="attSummary">
+          <span class="att-sum-item att-sum-p"><i class="fas fa-check-circle"></i> Present: <strong id="att-sum-p">0</strong></span>
+          <span class="att-sum-item att-sum-a"><i class="fas fa-times-circle"></i> Absent: <strong id="att-sum-a">0</strong></span>
+          <span class="att-sum-item att-sum-h"><i class="fas fa-star"></i> Holiday: <strong id="att-sum-h">0</strong></span>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="app.saveAttendance()">
+            <i class="fas fa-save"></i> Save Attendance
+          </button>
+          <button class="btn btn-secondary" onclick="app.closeAttendanceModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Employee History Modal ────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="empHistoryModal" role="dialog" aria-modal="true">
+    <div class="modal modal-xl">
+      <div class="modal-header">
+        <h2 id="empHistoryTitle">Employee Salary History</h2>
+        <button class="modal-close" onclick="app.closeEmpHistoryModal()" aria-label="Close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Basic</th>
+                <th>OT Hrs</th>
+                <th>OT Amt</th>
+                <th>Bonus</th>
+                <th>Fest. Bonus</th>
+                <th>Absent Days</th>
+                <th>Total Deduction</th>
+                <th>Net Salary</th>
+                <th>Slip</th>
+              </tr>
+            </thead>
+            <tbody id="emp-history-tbody">
+              <tr><td colspan="10" class="empty-state">No records</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ─── Toast ─────────────────────────────────────────────────────────────── -->
   <div class="toast" id="toast" role="status" aria-live="polite">
-    <i class="fas fa-check-circle"></i>
+    <i class="toast-icon fas fa-check-circle" id="toastIcon"></i>
     <span id="toastMessage">Success</span>
   </div>
 
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <!-- jsPDF + AutoTable (CDN) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
           crossorigin="anonymous" referrerpolicy="no-referrer"></script>

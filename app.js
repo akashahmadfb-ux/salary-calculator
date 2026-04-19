@@ -1160,7 +1160,7 @@ const app = {
 
     doc.autoTable({
       startY: 38,
-      head:   [['#', 'Employee Name', 'ID', 'Basic (BDT)', 'OT Hrs', 'OT Amt', 'Bonus', 'Fest. Bonus', 'Absent', 'Total Deduction', 'Net Salary (BDT)']],
+      head:   [['#', 'Employee Name', 'ID', 'Basic (BDT)', 'OT Hrs', 'OT Amt', 'Bonus', 'Fest. Bonus', 'Absent Days', 'Total Deduction', 'Net Salary (BDT)']],
       body:   tableRows,
       theme:  'grid',
       headStyles:  { fillColor: headerColor, textColor: 255, fontStyle: 'bold', fontSize: 8 },

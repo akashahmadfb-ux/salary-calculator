@@ -38,11 +38,17 @@
       <a class="nav-item" data-view="salary-entry" href="#">
         <i class="fas fa-calculator"></i><span>Salary Entry</span>
       </a>
+      <a class="nav-item" data-view="attendance" href="#">
+        <i class="fas fa-calendar-check"></i><span>Attendance</span>
+      </a>
       <a class="nav-item" data-view="history" href="#">
         <i class="fas fa-history"></i><span>History</span>
       </a>
       <a class="nav-item" data-view="monthly-summary" href="#">
         <i class="fas fa-file-alt"></i><span>Monthly Summary</span>
+      </a>
+      <a class="nav-item" data-view="payroll-reports" href="#">
+        <i class="fas fa-filter"></i><span>Payroll Reports</span>
       </a>
     </nav>
 
@@ -82,15 +88,15 @@
         <div class="stat-card">
           <div class="stat-icon orange"><i class="fas fa-clock"></i></div>
           <div class="stat-info">
-            <h3 id="stat-ot-hours">0</h3>
-            <p>OT Hours This Month</p>
+            <h3 id="stat-today-attendance">P: 0 | A: 0</h3>
+            <p>Today's Attendance</p>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-icon purple"><i class="fas fa-file-invoice"></i></div>
           <div class="stat-info">
-            <h3 id="stat-salary-records">0</h3>
-            <p>Total Salary Records</p>
+            <h3 id="stat-week-ot">0</h3>
+            <p>This Week's Total OT</p>
           </div>
         </div>
       </div>
@@ -271,6 +277,38 @@
       </div>
     </div>
 
+    <!-- ── Attendance Management View ───────────────────────────────────────── -->
+    <div class="view" id="view-attendance">
+      <div class="card">
+        <div class="card-header">
+          <h2>Attendance Management</h2>
+          <div class="attendance-actions">
+            <input type="month" id="att-man-month" onchange="app.onAttendanceMonthChange()">
+            <input type="date" id="att-man-date" onchange="app.onAttendanceDateChange()">
+          </div>
+        </div>
+        <div class="att-man-summary" id="att-man-summary">
+          <span class="att-sum-item att-sum-p"><i class="fas fa-check-circle"></i> Present: <strong id="att-man-p">0</strong></span>
+          <span class="att-sum-item att-sum-a"><i class="fas fa-times-circle"></i> Absent: <strong id="att-man-a">0</strong></span>
+          <span class="att-sum-item att-sum-h"><i class="fas fa-star"></i> Holiday: <strong id="att-man-h">0</strong></span>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>ID</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="attendance-list-tbody">
+              <tr><td colspan="3" class="empty-state">No employees found</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ── History View ────────────────────────────────────────────────────── -->
     <div class="view" id="view-history">
       <div class="card">
@@ -350,6 +388,50 @@
               <tr><td colspan="12" class="empty-state">Select a month and click Load</td></tr>
             </tbody>
             <tfoot id="summary-tfoot"></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Payroll Reports View ─────────────────────────────────────────────── -->
+    <div class="view" id="view-payroll-reports">
+      <div class="card">
+        <div class="card-header">
+          <h2>Payroll Reports</h2>
+          <div class="payroll-report-actions">
+            <select id="pr-period" onchange="app.onPayrollPeriodChange()">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly" selected>Monthly</option>
+            </select>
+            <input type="date" id="pr-start-date">
+            <input type="date" id="pr-end-date">
+            <button class="btn btn-primary" onclick="app.loadPayrollReport()">
+              <i class="fas fa-search"></i> Load
+            </button>
+          </div>
+        </div>
+        <div class="payroll-report-summary" id="payroll-report-summary">
+          <span>Total Attendance (P/A/H): <strong id="pr-total-attendance">0 / 0 / 0</strong></span>
+          <span>Total Salary: <strong id="pr-total-salary">&#2547;0</strong></span>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>ID</th>
+                <th>Present</th>
+                <th>Absent</th>
+                <th>Holiday</th>
+                <th>OT Hrs</th>
+                <th>Total Salary</th>
+              </tr>
+            </thead>
+            <tbody id="pr-tbody">
+              <tr><td colspan="7" class="empty-state">Select filters and click Load</td></tr>
+            </tbody>
+            <tfoot id="pr-tfoot"></tfoot>
           </table>
         </div>
       </div>

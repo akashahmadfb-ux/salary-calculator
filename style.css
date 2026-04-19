@@ -645,8 +645,19 @@ body {
   flex-wrap: wrap;
 }
 
+.attendance-actions,
+.payroll-report-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .history-filters select,
-.summary-actions input[type="month"] {
+.summary-actions input[type="month"],
+.attendance-actions input,
+.payroll-report-actions input,
+.payroll-report-actions select {
   padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -658,7 +669,38 @@ body {
 }
 
 .history-filters select:focus,
-.summary-actions input[type="month"]:focus {
+.summary-actions input[type="month"]:focus,
+.attendance-actions input:focus,
+.payroll-report-actions input:focus,
+.payroll-report-actions select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(13,115,119,.12);
+}
+
+.att-man-summary,
+.payroll-report-summary {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 20px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.att-status-select {
+  width: 100%;
+  min-width: 150px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.att-status-select:focus {
+  outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(13,115,119,.12);
 }
@@ -900,6 +942,18 @@ body {
   .chart-container { height: 220px; }
   .modal-xl { max-width: 100%; }
   .modal-lg { max-width: 100%; }
+  .attendance-actions,
+  .payroll-report-actions,
+  .history-filters,
+  .summary-actions {
+    width: 100%;
+  }
+  .attendance-actions input,
+  .payroll-report-actions input,
+  .payroll-report-actions select {
+    flex: 1;
+    min-width: 140px;
+  }
 }
 
 @media (max-width: 480px) {

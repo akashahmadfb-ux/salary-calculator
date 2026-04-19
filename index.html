@@ -283,8 +283,8 @@
         <div class="card-header">
           <h2>Attendance Management</h2>
           <div class="attendance-actions">
-            <input type="month" id="att-man-month" onchange="app.onAttendanceMonthChange()">
-            <input type="date" id="att-man-date" onchange="app.onAttendanceDateChange()">
+            <input type="month" id="att-man-month" aria-label="Select attendance month" onchange="app.onAttendanceMonthChange()">
+            <input type="date" id="att-man-date" aria-label="Select attendance date" onchange="app.onAttendanceDateChange()">
           </div>
         </div>
         <div class="att-man-summary" id="att-man-summary">
@@ -399,13 +399,13 @@
         <div class="card-header">
           <h2>Payroll Reports</h2>
           <div class="payroll-report-actions">
-            <select id="pr-period" onchange="app.onPayrollPeriodChange()">
+            <select id="pr-period" aria-label="Select report period" onchange="app.onPayrollPeriodChange()">
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
               <option value="monthly" selected>Monthly</option>
             </select>
-            <input type="date" id="pr-start-date">
-            <input type="date" id="pr-end-date">
+            <input type="date" id="pr-start-date" aria-label="Report start date">
+            <input type="date" id="pr-end-date" aria-label="Report end date">
             <button class="btn btn-primary" onclick="app.loadPayrollReport()">
               <i class="fas fa-search"></i> Load
             </button>

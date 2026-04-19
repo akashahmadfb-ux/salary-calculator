@@ -5,6 +5,8 @@
 
 const STORAGE_KEY     = 'tracsApparel_v2';
 const STORAGE_KEY_OLD = 'garmentEMS_v1';
+const MS_PER_DAY      = 86400000;
+const OT_RATE_MULTIPLIER = 0.5 / 100;
 
 function defaultData() {
   return { companyName: 'TRACS APPAREL', employees: [], salaryRecords: [], attendance: {} };
@@ -59,7 +61,7 @@ function dateStringToMidnight(dateStr) {
 function daysBetweenInclusive(startDate, endDate) {
   const startUTC = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
   const endUTC   = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-  return Math.floor((endUTC - startUTC) / 86400000) + 1;
+  return Math.floor((endUTC - startUTC) / MS_PER_DAY) + 1;
 }
 
 function monthFromDate(dateStr) {
@@ -91,7 +93,7 @@ function setAttendanceStatus(data, empId, dateStr, status) {
 }
 
 function calcSalary(basic, otHours, bonus, festivalBonus, absentDays, daysInMonth, deductions, advance) {
-  const otAmount        = otHours * (basic * 0.5 / 100);
+  const otAmount        = otHours * (basic * OT_RATE_MULTIPLIER);
   const absentDeduction = daysInMonth > 0 ? (basic / daysInMonth) * absentDays : 0;
   const total           = Math.max(0, basic + otAmount + bonus + festivalBonus - absentDeduction - deductions - advance);
   return { otAmount, absentDeduction, total };
@@ -1034,8 +1036,10 @@ const app = {
     const rows = data.employees.map(emp => {
       let p = 0, a = 0, h = 0, salary = 0, ot = 0;
 
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const dateStr = formatAsYYYYMMDD(d);
+      const startUTC = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+      const endUTC   = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate());
+      for (let ts = startUTC; ts <= endUTC; ts += MS_PER_DAY) {
+        const dateStr = formatAsYYYYMMDD(new Date(ts));
         const status = getAttendanceStatus(data, emp.id, dateStr);
         if (status === 'A') a++;
         else if (status === 'H') h++;

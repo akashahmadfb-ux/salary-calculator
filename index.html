@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Garment EMS — Employee Management System</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+        crossorigin="anonymous" referrerpolicy="no-referrer">
+</head>
+<body>
+
+  <!-- Mobile sidebar toggle button -->
+  <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle menu">
+    <i class="fas fa-bars"></i>
+  </button>
+
+  <!-- Mobile overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- ─── Sidebar ─────────────────────────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand">
+        <i class="fas fa-tshirt"></i>
+        <span>Garment EMS</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a class="nav-item active" data-view="dashboard" href="#">
+        <i class="fas fa-tachometer-alt"></i><span>Dashboard</span>
+      </a>
+      <a class="nav-item" data-view="employees" href="#">
+        <i class="fas fa-users"></i><span>Employees</span>
+      </a>
+      <a class="nav-item" data-view="salary-entry" href="#">
+        <i class="fas fa-calculator"></i><span>Salary Entry</span>
+      </a>
+      <a class="nav-item" data-view="history" href="#">
+        <i class="fas fa-history"></i><span>History</span>
+      </a>
+      <a class="nav-item" data-view="monthly-summary" href="#">
+        <i class="fas fa-file-alt"></i><span>Monthly Summary</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <input class="company-name-input" id="companyNameInput" type="text"
+             placeholder="Company name for PDFs" title="Company name used in PDF headers">
+      <div class="version">Garment EMS v1.0.0</div>
+    </div>
+  </aside>
+
+  <!-- ─── Main Content ─────────────────────────────────────────────────────── -->
+  <main class="main-content" id="mainContent">
+
+    <!-- Top header -->
+    <header class="top-header">
+      <h1 class="page-title" id="pageTitle">Dashboard</h1>
+      <span class="current-date" id="currentDate"></span>
+    </header>
+
+    <!-- ── Dashboard View ──────────────────────────────────────────────────── -->
+    <div class="view active" id="view-dashboard">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon blue"><i class="fas fa-users"></i></div>
+          <div class="stat-info">
+            <h3 id="stat-total-employees">0</h3>
+            <p>Total Employees</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green"><i class="fas fa-money-bill-wave"></i></div>
+          <div class="stat-info">
+            <h3 id="stat-this-month-payroll">&#2547;0</h3>
+            <p>This Month Payroll</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon orange"><i class="fas fa-clock"></i></div>
+          <div class="stat-info">
+            <h3 id="stat-ot-hours">0</h3>
+            <p>OT Hours This Month</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon purple"><i class="fas fa-file-invoice"></i></div>
+          <div class="stat-info">
+            <h3 id="stat-salary-records">0</h3>
+            <p>Total Salary Records</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="dashboard-bottom">
+        <div class="card recent-entries">
+          <div class="card-header"><h2>Recent Salary Entries</h2></div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Employee</th><th>Month</th><th>Basic</th><th>Net Salary</th>
+                </tr>
+              </thead>
+              <tbody id="recent-entries-tbody">
+                <tr><td colspan="4" class="empty-state">No records yet</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card quick-actions">
+          <div class="card-header"><h2>Quick Actions</h2></div>
+          <div class="quick-actions-grid">
+            <button class="action-btn"
+              onclick="app.navigateTo('employees'); setTimeout(() => document.getElementById('addEmployeeBtn').click(), 120)">
+              <i class="fas fa-user-plus"></i><span>Add Employee</span>
+            </button>
+            <button class="action-btn" onclick="app.navigateTo('salary-entry')">
+              <i class="fas fa-plus-circle"></i><span>New Salary Entry</span>
+            </button>
+            <button class="action-btn" onclick="app.navigateTo('monthly-summary')">
+              <i class="fas fa-file-pdf"></i><span>Monthly Summary</span>
+            </button>
+            <button class="action-btn" onclick="app.navigateTo('history')">
+              <i class="fas fa-history"></i><span>View History</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Employees View ──────────────────────────────────────────────────── -->
+    <div class="view" id="view-employees">
+      <div class="view-actions">
+        <button class="btn btn-primary" id="addEmployeeBtn" onclick="app.openAddEmployee()">
+          <i class="fas fa-plus"></i> Add Employee
+        </button>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h2>Employee List</h2>
+          <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" id="employeeSearch" placeholder="Search by name or ID…"
+                   oninput="app.filterEmployees()">
+          </div>
+        </div>
+        <div class="employee-grid" id="employee-grid">
+          <!-- cards rendered by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Salary Entry View ───────────────────────────────────────────────── -->
+    <div class="view" id="view-salary-entry">
+      <div class="card">
+        <div class="card-header"><h2>Salary Entry</h2></div>
+        <form class="salary-form" id="salaryEntryForm" onsubmit="app.saveSalaryEntry(event)">
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Employee *</label>
+              <select id="se-employee" required onchange="app.onEmployeeSelect()">
+                <option value="">— Select Employee —</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Month *</label>
+              <input type="month" id="se-month" required>
+            </div>
+            <div class="form-group">
+              <label>Basic Salary</label>
+              <input type="number" id="se-basic" readonly placeholder="Auto-filled">
+            </div>
+            <div class="form-group">
+              <label>OT Hours</label>
+              <input type="number" id="se-ot-hours" min="0" step="0.5" value="0"
+                     oninput="app.calcPreview()">
+            </div>
+            <div class="form-group">
+              <label>Bonus</label>
+              <input type="number" id="se-bonus" min="0" value="0" oninput="app.calcPreview()">
+            </div>
+            <div class="form-group">
+              <label>Deductions</label>
+              <input type="number" id="se-deductions" min="0" value="0" oninput="app.calcPreview()">
+            </div>
+            <div class="form-group">
+              <label>Advance</label>
+              <input type="number" id="se-advance" min="0" value="0" oninput="app.calcPreview()">
+            </div>
+          </div>
+
+          <!-- Live calculation preview -->
+          <div class="salary-preview">
+            <h3><i class="fas fa-calculator" style="margin-right:6px"></i>Salary Preview</h3>
+            <div class="preview-grid">
+              <div class="preview-item">
+                <span>Basic Salary</span><span id="prev-basic">&#2547;0</span>
+              </div>
+              <div class="preview-item">
+                <span>OT Amount</span><span id="prev-ot">&#2547;0</span>
+              </div>
+              <div class="preview-item">
+                <span>Bonus</span><span id="prev-bonus">&#2547;0</span>
+              </div>
+              <div class="preview-item deduction">
+                <span>Deductions</span><span id="prev-deductions">&#2547;0</span>
+              </div>
+              <div class="preview-item deduction">
+                <span>Advance</span><span id="prev-advance">&#2547;0</span>
+              </div>
+              <div class="preview-item total">
+                <span>NET TOTAL</span><span id="prev-total">&#2547;0</span>
+              </div>
+            </div>
+            <p style="margin-top:10px;font-size:11px;color:var(--text-secondary)">
+              Formula: Basic + (OT Hours &times; Basic &times; 0.5 / 100) + Bonus &minus; Deductions &minus; Advance
+            </p>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-save"></i> Save Entry
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="app.resetSalaryForm()">
+              <i class="fas fa-times"></i> Reset
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ── History View ────────────────────────────────────────────────────── -->
+    <div class="view" id="view-history">
+      <div class="card">
+        <div class="card-header">
+          <h2>Salary History</h2>
+          <div class="history-filters">
+            <select id="hist-employee" onchange="app.filterHistory()">
+              <option value="">All Employees</option>
+            </select>
+            <select id="hist-month" onchange="app.filterHistory()">
+              <option value="">All Months</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>ID</th>
+                <th>Month</th>
+                <th>Basic</th>
+                <th>OT Hrs</th>
+                <th>OT Amt</th>
+                <th>Bonus</th>
+                <th>Deductions</th>
+                <th>Advance</th>
+                <th>Net Salary</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="history-tbody">
+              <tr><td colspan="11" class="empty-state">No records found</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Monthly Summary View ────────────────────────────────────────────── -->
+    <div class="view" id="view-monthly-summary">
+      <div class="card">
+        <div class="card-header">
+          <h2>Monthly Summary</h2>
+          <div class="summary-actions">
+            <input type="month" id="summary-month">
+            <button class="btn btn-primary" onclick="app.loadSummary()">
+              <i class="fas fa-search"></i> Load
+            </button>
+            <button class="btn btn-danger" onclick="app.generateSummaryPDF()">
+              <i class="fas fa-file-pdf"></i> Export PDF
+            </button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Employee Name</th>
+                <th>ID</th>
+                <th>Basic</th>
+                <th>OT Hrs</th>
+                <th>OT Amt</th>
+                <th>Bonus</th>
+                <th>Deductions</th>
+                <th>Advance</th>
+                <th>Net Salary</th>
+                <th>Slip</th>
+              </tr>
+            </thead>
+            <tbody id="summary-tbody">
+              <tr><td colspan="11" class="empty-state">Select a month and click Load</td></tr>
+            </tbody>
+            <tfoot id="summary-tfoot"></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main><!-- /main-content -->
+
+  <!-- ─── Add / Edit Employee Modal ─────────────────────────────────────────── -->
+  <div class="modal-overlay" id="employeeModal" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="employeeModalTitle">Add Employee</h2>
+        <button class="modal-close" onclick="app.closeEmployeeModal()" aria-label="Close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Photo upload -->
+        <div class="photo-upload-area">
+          <div class="photo-preview" id="photoPreview">
+            <i class="fas fa-user"></i>
+          </div>
+          <div class="photo-upload-controls">
+            <label for="photoInput" class="btn btn-secondary" style="cursor:pointer">
+              <i class="fas fa-camera"></i> Upload Photo
+            </label>
+            <input type="file" id="photoInput" accept="image/*" style="display:none"
+                   onchange="app.handlePhotoUpload(event)">
+            <button type="button" class="btn btn-outline" onclick="app.removePhoto()">
+              <i class="fas fa-trash"></i> Remove
+            </button>
+          </div>
+        </div>
+
+        <form id="employeeForm" onsubmit="app.saveEmployee(event)">
+          <div class="form-group" style="margin-bottom:14px">
+            <label>Employee Name *</label>
+            <input type="text" id="emp-name" placeholder="Full name" required>
+          </div>
+          <div class="form-group" style="margin-bottom:14px">
+            <label>Employee ID *</label>
+            <input type="text" id="emp-id" placeholder="e.g. EMP001" required>
+          </div>
+          <div class="form-group" style="margin-bottom:14px">
+            <label>Basic Salary (BDT) *</label>
+            <input type="number" id="emp-basic" placeholder="Monthly basic salary" min="0" required>
+          </div>
+          <div class="form-group" style="margin-bottom:14px">
+            <label>Department</label>
+            <input type="text" id="emp-department" placeholder="e.g. Sewing, Cutting, Finishing">
+          </div>
+          <input type="hidden" id="emp-edit-id">
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-save"></i> Save Employee
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="app.closeEmployeeModal()">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Confirm Modal ─────────────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="confirmModal" role="dialog" aria-modal="true">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>Confirm Action</h2>
+        <button class="modal-close" onclick="app.closeConfirmModal()" aria-label="Close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmMessage" style="margin-bottom:16px;line-height:1.5">Are you sure?</p>
+        <div class="form-actions">
+          <button class="btn btn-danger" id="confirmBtn">
+            <i class="fas fa-trash"></i> Delete
+          </button>
+          <button class="btn btn-secondary" onclick="app.closeConfirmModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Toast ─────────────────────────────────────────────────────────────── -->
+  <div class="toast" id="toast" role="status" aria-live="polite">
+    <i class="fas fa-check-circle"></i>
+    <span id="toastMessage">Success</span>
+  </div>
+
+  <!-- jsPDF + AutoTable (CDN) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="app.js"></script>
+</body>
+</html>

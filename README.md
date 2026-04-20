@@ -1,6 +1,6 @@
 # Garment EMS — Employee Management System
 
-A fully client-side web application for managing garment factory employee salaries.
+A web application for managing garment factory employee salaries with Firebase Authentication and Firebase Realtime Database.
 
 ## Features
 
@@ -11,20 +11,24 @@ A fully client-side web application for managing garment factory employee salari
 - **Attendance Management** — Dedicated Attendance tab for date-wise Present / Absent / Company Holiday marking for all employees.
 - **Payroll Reports** — Daily / Weekly / Monthly filtering with custom date range, attendance totals, and salary totals.
 - **PDF Generation** — Individual salary slip PDF per worker + a Monthly Summary Sheet PDF (landscape, table format).
-- **Local Storage** — All data persists in the browser with no backend required.
+- **Firebase Realtime Database** — Worker profiles, attendance, and salary records are stored in cloud data paths per authenticated user.
+- **Firebase Authentication** — Role-based sign-in (Admin / Manager / HR) secures access.
 - **Responsive Design** — Professional dashboard with collapsible sidebar; mobile-friendly tables.
 
 ## Usage
 
 Open `index.html` in any modern browser — no build step or server required.
 
+> Internet access is required because Firebase SDKs are loaded from Google CDN.
+
 1. Set your **Company Name** in the sidebar footer (used in PDF headers).
-2. Go to **Employees** → Add Employee to create worker profiles.
-3. Go to **Salary Entry** → select an employee, fill OT hours / bonus / deductions, and save.
-4. Go to **Attendance** → choose date/month and mark employee attendance (Present/Absent/Company Holiday).
-5. Go to **Payroll Reports** → choose Daily/Weekly/Monthly, set date range, and load totals.
-6. Go to **Monthly Summary** → pick a month → Load → Export PDF.
-7. Individual salary slips can be downloaded from the **History** or **Monthly Summary** views.
+2. Sign in with your Firebase account and choose your role.
+3. Go to **Employees** → Add Employee to create worker profiles.
+4. Go to **Salary Entry** → select an employee, fill OT hours / bonus / deductions, and save.
+5. Go to **Attendance** → choose date/month and mark employee attendance (Present/Absent/Company Holiday).
+6. Go to **Payroll Reports** → choose Daily/Weekly/Monthly, set date range, and load totals.
+7. Go to **Monthly Summary** → pick a month → Load → Export PDF.
+8. Individual salary slips can be downloaded from the **History** or **Monthly Summary** views.
 
 ## Files
 

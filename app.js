@@ -313,7 +313,7 @@ const app = {
           const expected = this._pendingRole;
           this._pendingRole = null;
           await signOut(auth);
-          showToast(`Role mismatch. Expected ${expected.toUpperCase()}, account is ${role.toUpperCase()}.`, 'error');
+          showToast(`This account is assigned ${role.toUpperCase()}. Please select ${role.toUpperCase()} to sign in.`, 'error');
           return;
         }
 

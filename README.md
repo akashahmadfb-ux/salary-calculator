@@ -20,6 +20,7 @@ A web application for managing garment factory employee salaries with Firebase A
 Open `index.html` in any modern browser — no build step or server required.
 
 > Internet access is required because Firebase SDKs are loaded from Google CDN.
+> Before first use, create Firebase Authentication users and set each role in Realtime Database under `tracsRoles/{uid}/role` (e.g., `admin`, `manager`, `hr`).
 
 1. Set your **Company Name** in the sidebar footer (used in PDF headers).
 2. Sign in with your Firebase account and choose your role.

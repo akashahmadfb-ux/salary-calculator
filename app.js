@@ -19,7 +19,7 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const database = getDatabase(firebaseApp);
 const auth = getAuth(firebaseApp);
-try { getAnalytics(firebaseApp); } catch (e) { /* Analytics may be unavailable in some environments */ }
+try { getAnalytics(firebaseApp); } catch (e) { console.warn('Analytics initialization failed:', e); }
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
@@ -313,7 +313,7 @@ const app = {
           const expected = this._pendingRole;
           this._pendingRole = null;
           await signOut(auth);
-          showToast(`Role mismatch. Sign in as ${expected.toUpperCase()}.`, 'error');
+          showToast(`Role mismatch. Expected ${expected.toUpperCase()}, account is ${role.toUpperCase()}.`, 'error');
           return;
         }
 

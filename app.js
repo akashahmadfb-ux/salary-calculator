@@ -1,46 +1,105 @@
 /* app.js — TRACS APPAREL Management Web App */
 'use strict';
 
-// ─── Storage ──────────────────────────────────────────────────────────────────
+// ─── Cloud / Data Provider ────────────────────────────────────────────────────
 
-const STORAGE_KEY     = 'tracsApparel_v2';
-const STORAGE_KEY_OLD = 'garmentEMS_v1';
 const MS_PER_DAY      = 86400000;
 const OT_RATE_FACTOR  = 0.5 / 100;
+const OFFICE_END_MINUTES = 17 * 60;
+const FIREBASE_CONFIG = {
+  apiKey: 'YOUR_FIREBASE_API_KEY',
+  authDomain: 'YOUR_FIREBASE_AUTH_DOMAIN',
+  projectId: 'YOUR_FIREBASE_PROJECT_ID',
+  storageBucket: 'YOUR_FIREBASE_STORAGE_BUCKET',
+  messagingSenderId: 'YOUR_FIREBASE_MESSAGING_SENDER_ID',
+  appId: 'YOUR_FIREBASE_APP_ID',
+};
+const DEMO_USERS = [
+  { email: 'admin@tracs.local', password: 'admin123', role: 'admin' },
+  { email: 'worker@tracs.local', password: 'worker123', role: 'worker', employeeId: null },
+];
+let memoryData = null;
 
 function defaultData() {
-  return { companyName: 'TRACS APPAREL', employees: [], salaryRecords: [], attendance: {} };
-}
-
-function loadData() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const d = JSON.parse(raw);
-      if (!d.attendance) d.attendance = {};
-      return d;
-    }
-    // Migrate from old storage key
-    const oldRaw = localStorage.getItem(STORAGE_KEY_OLD);
-    if (oldRaw) {
-      const old = JSON.parse(oldRaw);
-      const migrated = {
-        companyName:   'TRACS APPAREL',
-        employees:     old.employees     || [],
-        salaryRecords: old.salaryRecords || [],
-        attendance:    {},
-      };
-      saveData(migrated);
-      return migrated;
-    }
-    return defaultData();
-  } catch (e) {
-    return defaultData();
-  }
+  return {
+    companyName: 'TRACS APPAREL',
+    employees: [],
+    salaryRecords: [],
+    attendance: {},
+    users: [],
+  };
 }
 
 function saveData(data) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  memoryData = { ...data };
+  app._data = memoryData;
+  if (app._cloudEnabled) app._persistToCloud();
+}
+
+function loadData() {
+  return app._data || memoryData || defaultData();
+}
+
+function normalizeDataShape(data) {
+  const d = data && typeof data === 'object' ? data : defaultData();
+  if (!d.attendance || typeof d.attendance !== 'object') d.attendance = {};
+  if (!Array.isArray(d.employees)) d.employees = [];
+  if (!Array.isArray(d.salaryRecords)) d.salaryRecords = [];
+  if (!Array.isArray(d.users)) d.users = [];
+  return d;
+}
+
+function isFirebaseConfigured() {
+  return Object.values(FIREBASE_CONFIG).every(v => v && !String(v).startsWith('YOUR_FIREBASE_'));
+}
+
+function minutesFromTime(timeStr) {
+  if (!timeStr || !/^\d{2}:\d{2}$/.test(timeStr)) return null;
+  const [h, m] = timeStr.split(':').map(Number);
+  return (h * 60) + m;
+}
+
+function computeOtHours(outTime) {
+  const outMinutes = minutesFromTime(outTime);
+  if (outMinutes === null) return 0;
+  return Math.max(0, (outMinutes - OFFICE_END_MINUTES) / 60);
+}
+
+function canWorkerEditDate(dateStr) {
+  if (!dateStr) return false;
+  const dayStart = new Date(`${dateStr}T00:00:00`).getTime();
+  return (Date.now() - dayStart) <= MS_PER_DAY;
+}
+
+function getAttendanceEntry(data, empId, dateStr) {
+  if (!empId || !dateStr) return { status: 'P', inTime: '', outTime: '', otHours: 0 };
+  const month = monthFromDate(dateStr);
+  const day   = dayFromDate(dateStr);
+  if (!month || !day) return { status: 'P', inTime: '', outTime: '', otHours: 0 };
+  const key = `${empId}|${month}`;
+  const raw = ((data.attendance || {})[key] || {})[day];
+  if (!raw) return { status: 'P', inTime: '', outTime: '', otHours: 0 };
+  if (typeof raw === 'string') return { status: raw, inTime: '', outTime: '', otHours: 0 };
+  return {
+    status: raw.status || 'P',
+    inTime: raw.inTime || '',
+    outTime: raw.outTime || '',
+    otHours: parseFloat(raw.otHours) || computeOtHours(raw.outTime || ''),
+  };
+}
+
+function setAttendanceEntry(data, empId, dateStr, patch) {
+  if (!empId || !dateStr) return;
+  const month = monthFromDate(dateStr);
+  const day   = dayFromDate(dateStr);
+  if (!month || !day) return;
+  if (!data.attendance) data.attendance = {};
+  const key = `${empId}|${month}`;
+  if (!data.attendance[key]) data.attendance[key] = {};
+  const current = getAttendanceEntry(data, empId, dateStr);
+  const next = { ...current, ...patch };
+  next.otHours = parseFloat(next.otHours) || computeOtHours(next.outTime);
+  data.attendance[key][day] = next;
 }
 
 // ─── Salary Calculation ────────────────────────────────────────────────────────
@@ -74,23 +133,11 @@ function dayFromDate(dateStr) {
 }
 
 function getAttendanceStatus(data, empId, dateStr) {
-  if (!empId || !dateStr) return 'P';
-  const month = monthFromDate(dateStr);
-  const day   = dayFromDate(dateStr);
-  if (!month || !day) return 'P';
-  const key = `${empId}|${month}`;
-  return ((data.attendance || {})[key] || {})[day] || 'P';
+  return getAttendanceEntry(data, empId, dateStr).status || 'P';
 }
 
 function setAttendanceStatus(data, empId, dateStr, status) {
-  if (!empId || !dateStr) return;
-  const month = monthFromDate(dateStr);
-  const day   = dayFromDate(dateStr);
-  if (!month || !day) return;
-  if (!data.attendance) data.attendance = {};
-  const key = `${empId}|${month}`;
-  if (!data.attendance[key]) data.attendance[key] = {};
-  data.attendance[key][day] = status;
+  setAttendanceEntry(data, empId, dateStr, { status });
 }
 
 function calcSalary(basic, otHours, bonus, festivalBonus, absentDays, daysInMonth, deductions, advance) {
@@ -160,7 +207,7 @@ function showToast(msg, type = 'success') {
   t._timer = setTimeout(() => t.classList.remove('show'), 3200);
 }
 
-// Compress & resize image to ≤200px for localStorage friendliness
+// Compress & resize image to keep payload light for cloud sync
 function compressImage(dataUrl, cb) {
   const img = new Image();
   img.onload = () => {
@@ -186,10 +233,25 @@ const app = {
   _attEmpId:        null,
   _attMonth:        null,
   _attMgmtDate:     null,
+  _data:            defaultData(),
+  _cloudEnabled:    false,
+  _firebaseAuth:    null,
+  _firebaseDb:      null,
+  _currentUser:     null,
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
 
-  init() {
+  async init() {
+    document.body.classList.add('auth-required');
+    document.getElementById('loginScreen').classList.add('show');
+
+    await this._initCloud();
+    this._data = await this._fetchInitialData();
+    const loginHint = document.getElementById('loginHint');
+    if (loginHint && !this._cloudEnabled) {
+      loginHint.textContent = 'Demo credentials: admin@tracs.local / admin123 or worker@tracs.local / worker123';
+    }
+
     document.getElementById('currentDate').textContent =
       new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -240,9 +302,121 @@ const app = {
     });
 
     this.navigateTo('dashboard');
+    this._updateAuthUi();
+  },
+
+  async _initCloud() {
+    if (!window.firebase || !isFirebaseConfigured()) return;
+    try {
+      firebase.initializeApp(FIREBASE_CONFIG);
+      this._firebaseAuth = firebase.auth();
+      this._firebaseDb = firebase.firestore();
+      this._cloudEnabled = true;
+    } catch (err) {
+      this._cloudEnabled = false;
+      console.warn('Firebase init skipped:', err);
+    }
+  },
+
+  async _fetchInitialData() {
+    if (!this._cloudEnabled) return normalizeDataShape(defaultData());
+    try {
+      const doc = await this._firebaseDb.collection('tracs').doc('appData').get();
+      return normalizeDataShape(doc.exists ? doc.data() : defaultData());
+    } catch (err) {
+      showToast('Cloud read failed. Running offline.', 'warning');
+      return normalizeDataShape(defaultData());
+    }
+  },
+
+  async _persistToCloud() {
+    if (!this._cloudEnabled) return;
+    try {
+      await this._firebaseDb.collection('tracs').doc('appData').set(this._data);
+    } catch (err) {
+      showToast('Cloud sync failed for latest change.', 'warning');
+    }
+  },
+
+  _updateAuthUi() {
+    const current = this._currentUser;
+    const label = current ? `${current.role.toUpperCase()} • ${current.email}` : 'Not signed in';
+    const sessionEl = document.getElementById('sessionUser');
+    if (sessionEl) sessionEl.textContent = label;
+
+    const isWorker = !!current && current.role === 'worker';
+    const allowed = isWorker ? new Set(['worker-dashboard']) : null;
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.style.display = isWorker && !allowed.has(item.dataset.view) ? 'none' : '';
+    });
+  },
+
+  _isAdmin() {
+    return !!this._currentUser && this._currentUser.role === 'admin';
+  },
+
+  _requireAdmin() {
+    if (this._isAdmin()) return true;
+    showToast('Admin access required.', 'error');
+    return false;
+  },
+
+  async handleLogin(evt) {
+    evt.preventDefault();
+    const role = document.getElementById('login-role').value;
+    const email = document.getElementById('login-email').value.trim().toLowerCase();
+    const password = document.getElementById('login-password').value;
+
+    let profile = null;
+    if (this._cloudEnabled && this._firebaseAuth) {
+      try {
+        const cred = await this._firebaseAuth.signInWithEmailAndPassword(email, password);
+        const uid = cred?.user?.uid;
+        const users = (loadData().users || []);
+        profile = users.find(u => u.uid === uid || (u.email || '').toLowerCase() === email) || null;
+      } catch (err) {
+        showToast('Login failed. Check credentials or Firebase setup.', 'error');
+        return;
+      }
+    } else {
+      profile = DEMO_USERS.find(u => u.email === email && u.password === password) || null;
+    }
+
+    if (!profile || profile.role !== role) {
+      showToast('Role or credentials are incorrect.', 'error');
+      return;
+    }
+
+    this._currentUser = { role: profile.role, email: profile.email, employeeId: profile.employeeId || null };
+    document.getElementById('loginForm').reset();
+    document.getElementById('loginScreen').classList.remove('show');
+    document.body.classList.remove('auth-required');
+    this._updateAuthUi();
+    if (this._currentUser.role === 'worker') {
+      this.navigateTo('worker-dashboard');
+    } else {
+      this.navigateTo('dashboard');
+    }
+    showToast('Login successful.');
+  },
+
+  async logout() {
+    if (this._cloudEnabled && this._firebaseAuth) {
+      try { await this._firebaseAuth.signOut(); } catch (err) { /* ignore */ }
+    }
+    this._currentUser = null;
+    this._updateAuthUi();
+    document.body.classList.add('auth-required');
+    document.getElementById('loginScreen').classList.add('show');
+    showToast('Signed out.', 'info');
   },
 
   navigateTo(view) {
+    if (!this._currentUser) return;
+    if (this._currentUser.role === 'worker' && view !== 'worker-dashboard') {
+      view = 'worker-dashboard';
+    }
+
     document.querySelectorAll('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.view === view));
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     const el = document.getElementById(`view-${view}`);
@@ -256,6 +430,7 @@ const app = {
       history:           'History',
       'monthly-summary': 'Monthly Summary',
       'payroll-reports': 'Payroll Reports',
+      'worker-dashboard': 'Worker Dashboard',
     };
     document.getElementById('pageTitle').textContent = titles[view] || view;
 
@@ -269,6 +444,7 @@ const app = {
     if (view === 'history')         this.renderHistory();
     if (view === 'monthly-summary') { /* user clicks Load */ }
     if (view === 'payroll-reports') this.renderPayrollReports();
+    if (view === 'worker-dashboard') this.renderWorkerDashboard();
   },
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
@@ -294,9 +470,15 @@ const app = {
       else presentCount++;
     });
 
-    const weekOt = data.salaryRecords
-      .filter(r => r.createdAt && r.createdAt >= weekStart.getTime() && r.createdAt <= weekEnd.getTime())
-      .reduce((s, r) => s + (r.otHours || 0), 0);
+    let weekOt = 0;
+    for (let ts = Date.UTC(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate());
+         ts <= Date.UTC(weekEnd.getFullYear(), weekEnd.getMonth(), weekEnd.getDate());
+         ts += MS_PER_DAY) {
+      const dateStr = formatAsYYYYMMDD(new Date(ts));
+      data.employees.forEach(emp => {
+        weekOt += getAttendanceEntry(data, emp.id, dateStr).otHours || 0;
+      });
+    }
 
     document.getElementById('stat-total-employees').textContent    = data.employees.length;
     document.getElementById('stat-this-month-payroll').textContent = fmt(recs.reduce((s, r) => s + r.totalSalary, 0));
@@ -465,6 +647,7 @@ const app = {
   },
 
   openAddEmployee() {
+    if (!this._requireAdmin()) return;
     this._editEmpId = null;
     this._photo     = null;
     document.getElementById('employeeModalTitle').textContent = 'Add Employee';
@@ -475,6 +658,7 @@ const app = {
   },
 
   openEditEmployee(id) {
+    if (!this._requireAdmin()) return;
     const data = loadData();
     const emp  = data.employees.find(e => e.id === id);
     if (!emp) return;
@@ -523,6 +707,7 @@ const app = {
 
   saveEmployee(evt) {
     evt.preventDefault();
+    if (!this._requireAdmin()) return;
     const data   = loadData();
     const name   = document.getElementById('emp-name').value.trim();
     const id     = document.getElementById('emp-id').value.trim();
@@ -564,6 +749,7 @@ const app = {
   },
 
   confirmDeleteEmployee(id) {
+    if (!this._requireAdmin()) return;
     const data = loadData();
     const emp  = data.employees.find(e => e.id === id);
     if (!emp) return;
@@ -574,6 +760,7 @@ const app = {
   },
 
   deleteEmployee(id) {
+    if (!this._requireAdmin()) return;
     const data = loadData();
     data.employees     = data.employees.filter(e => e.id !== id);
     data.salaryRecords = data.salaryRecords.filter(r => r.employeeId !== id);
@@ -640,6 +827,7 @@ const app = {
   // ── Salary Entry ────────────────────────────────────────────────────────────
 
   openSalaryEntry(empId) {
+    if (!this._requireAdmin()) return;
     this.navigateTo('salary-entry');
     setTimeout(() => {
       document.getElementById('se-employee').value = empId;
@@ -684,7 +872,8 @@ const app = {
       const days       = getDaysInMonth(month);
       let   absent     = 0;
       for (let d = 1; d <= days; d++) {
-        if ((attendance[d] || 'P') === 'A') absent++;
+        const entry = typeof attendance[d] === 'string' ? { status: attendance[d] } : (attendance[d] || {});
+        if ((entry.status || 'P') === 'A') absent++;
       }
       document.getElementById('se-absent-days').value          = absent;
       document.getElementById('att-absent-count').textContent  = absent;
@@ -730,6 +919,7 @@ const app = {
 
   saveSalaryEntry(evt) {
     evt.preventDefault();
+    if (!this._requireAdmin()) return;
     const data          = loadData();
     const empId         = document.getElementById('se-employee').value;
     const month         = document.getElementById('se-month').value;
@@ -793,6 +983,7 @@ const app = {
   // ── Attendance Modal ────────────────────────────────────────────────────────
 
   openAttendanceModal() {
+    if (!this._requireAdmin()) return;
     const empId = document.getElementById('se-employee').value;
     const month = document.getElementById('se-month').value;
 
@@ -804,7 +995,12 @@ const app = {
 
     const data = loadData();
     const key  = `${empId}|${month}`;
-    this._tempAttendance = Object.assign({}, (data.attendance || {})[key] || {});
+    const source = Object.assign({}, (data.attendance || {})[key] || {});
+    this._tempAttendance = {};
+    Object.keys(source).forEach(day => {
+      const entry = source[day];
+      this._tempAttendance[day] = typeof entry === 'string' ? entry : (entry.status || 'P');
+    });
 
     const emp = data.employees.find(e => e.id === empId);
     document.getElementById('attModalTitle').textContent =
@@ -862,16 +1058,29 @@ const app = {
   },
 
   saveAttendance() {
+    if (!this._requireAdmin()) return;
     const data = loadData();
     if (!data.attendance) data.attendance = {};
     const key = `${this._attEmpId}|${this._attMonth}`;
-    data.attendance[key] = { ...this._tempAttendance };
+    const existing = data.attendance[key] || {};
+    data.attendance[key] = { ...existing };
+    Object.keys(this._tempAttendance).forEach(day => {
+      const prev = existing[day];
+      const status = this._tempAttendance[day] || 'P';
+      if (typeof prev === 'object' && prev !== null) {
+        data.attendance[key][day] = { ...prev, status };
+      } else {
+        data.attendance[key][day] = status;
+      }
+    });
     saveData(data);
 
     const days = getDaysInMonth(this._attMonth);
     let absent = 0;
     for (let d = 1; d <= days; d++) {
-      if ((this._tempAttendance[d] || 'P') === 'A') absent++;
+      const v = this._tempAttendance[d];
+      const status = typeof v === 'string' ? v : ((v && v.status) || 'P');
+      if (status === 'A') absent++;
     }
     document.getElementById('se-absent-days').value          = absent;
     document.getElementById('att-absent-count').textContent  = absent;
@@ -934,9 +1143,10 @@ const app = {
     const dateStr = this._attMgmtDate || document.getElementById('att-man-date').value;
     const tbody = document.getElementById('attendance-list-tbody');
     if (!tbody) return;
+    const workerLocked = !canWorkerEditDate(dateStr);
 
     if (!data.employees.length) {
-      tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No employees found</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No employees found</td></tr>';
       document.getElementById('att-man-p').textContent = '0';
       document.getElementById('att-man-a').textContent = '0';
       document.getElementById('att-man-h').textContent = '0';
@@ -945,19 +1155,26 @@ const app = {
 
     let p = 0, a = 0, h = 0;
     tbody.innerHTML = data.employees.map(emp => {
-      const status = getAttendanceStatus(data, emp.id, dateStr);
+      const entry = getAttendanceEntry(data, emp.id, dateStr);
+      const status = entry.status;
       if (status === 'A') a++;
       else if (status === 'H') h++;
       else p++;
       return `<tr>
         <td>${esc(emp.name)}</td>
         <td>${esc(emp.id)}</td>
+        <td><input class="att-time-input" type="time" value="${esc(entry.inTime || '')}" onchange="app.setAttendanceTimeForDate('${esc(emp.id)}','${dateStr}','inTime', this.value)"></td>
+        <td><input class="att-time-input" type="time" value="${esc(entry.outTime || '')}" onchange="app.setAttendanceTimeForDate('${esc(emp.id)}','${dateStr}','outTime', this.value)"></td>
+        <td>${formatOtHours(entry.otHours || 0)}</td>
         <td>
           <select class="att-status-select" onchange="app.setAttendanceForDate('${esc(emp.id)}', this.value)">
             <option value="P" ${status === 'P' ? 'selected' : ''}>Present</option>
             <option value="A" ${status === 'A' ? 'selected' : ''}>Absent</option>
             <option value="H" ${status === 'H' ? 'selected' : ''}>Company Holiday</option>
           </select>
+        </td>
+        <td>
+          <span class="att-lock-badge ${workerLocked ? 'locked' : 'open'}">${workerLocked ? 'Locked' : 'Editable'}</span>
         </td>
       </tr>`;
     }).join('');
@@ -968,6 +1185,7 @@ const app = {
   },
 
   setAttendanceForDate(empId, status) {
+    if (!this._requireAdmin()) return;
     const data = loadData();
     const dateStr = document.getElementById('att-man-date').value;
     setAttendanceStatus(data, empId, dateStr, status);
@@ -978,6 +1196,123 @@ const app = {
     this.calcPreview();
     this.renderDashboard();
     this.renderPayrollReports();
+  },
+
+  setAttendanceTimeForDate(empId, dateStr, field, value) {
+    if (!this._requireAdmin()) return;
+    const data = loadData();
+    if (!['inTime', 'outTime'].includes(field)) return;
+    const patch = {};
+    patch[field] = value || '';
+    setAttendanceEntry(data, empId, dateStr, patch);
+    saveData(data);
+    this._attMgmtDate = dateStr;
+    this._renderAttendanceManagementRows(data);
+  },
+
+  // ── Worker Dashboard ─────────────────────────────────────────────────────────
+
+  renderWorkerDashboard() {
+    const current = this._currentUser;
+    if (!current || current.role !== 'worker') return;
+    const data = loadData();
+    let employee = data.employees.find(e => e.id === current.employeeId);
+    if (!employee) employee = data.employees[0] || null;
+
+    const profileEl = document.getElementById('workerProfile');
+    if (!employee) {
+      profileEl.innerHTML = '<div class="empty-state-full"><p>No employee profile is linked to this worker.</p></div>';
+      return;
+    }
+    current.employeeId = employee.id;
+
+    profileEl.innerHTML = `
+      <div class="worker-profile-item"><small>Name</small><strong>${esc(employee.name)}</strong></div>
+      <div class="worker-profile-item"><small>Employee ID</small><strong>${esc(employee.id)}</strong></div>
+      <div class="worker-profile-item"><small>Department</small><strong>${esc(employee.department || '-')}</strong></div>
+      <div class="worker-profile-item"><small>Basic Salary</small><strong>${fmt(employee.basicSalary || 0)}</strong></div>
+    `;
+
+    const today = formatAsYYYYMMDD(new Date());
+    const dateInput = document.getElementById('worker-att-date');
+    if (!dateInput.value) dateInput.value = today;
+    this.onWorkerDateChange();
+    this._renderWorkerAttendanceHistory(employee.id);
+  },
+
+  onWorkerDateChange() {
+    const current = this._currentUser;
+    if (!current || current.role !== 'worker' || !current.employeeId) return;
+    const dateStr = document.getElementById('worker-att-date').value;
+    const entry = getAttendanceEntry(loadData(), current.employeeId, dateStr);
+    document.getElementById('worker-in-time').value = entry.inTime || '';
+    document.getElementById('worker-out-time').value = entry.outTime || '';
+    document.getElementById('worker-ot-hours').value = (parseFloat(entry.otHours) || 0).toFixed(2);
+
+    const locked = !canWorkerEditDate(dateStr);
+    document.getElementById('worker-in-time').disabled = locked;
+    document.getElementById('worker-out-time').disabled = locked;
+    document.getElementById('worker-att-save-btn').disabled = locked;
+    document.getElementById('worker-att-lock-msg').textContent = locked ? 'Editing is locked for this date (24-hour rule).' : '';
+  },
+
+  previewWorkerOt() {
+    const outTime = document.getElementById('worker-out-time').value;
+    document.getElementById('worker-ot-hours').value = computeOtHours(outTime).toFixed(2);
+  },
+
+  saveWorkerAttendance(evt) {
+    evt.preventDefault();
+    const current = this._currentUser;
+    if (!current || current.role !== 'worker' || !current.employeeId) return;
+    const dateStr = document.getElementById('worker-att-date').value;
+    if (!canWorkerEditDate(dateStr)) {
+      showToast('You can only edit within 24 hours of the date.', 'error');
+      return;
+    }
+
+    const inTime = document.getElementById('worker-in-time').value;
+    const outTime = document.getElementById('worker-out-time').value;
+    const data = loadData();
+    setAttendanceEntry(data, current.employeeId, dateStr, {
+      inTime,
+      outTime,
+      status: (inTime || outTime) ? 'P' : 'A',
+      otHours: computeOtHours(outTime),
+      updatedByRole: 'worker',
+      updatedAt: Date.now(),
+    });
+    saveData(data);
+    this.onWorkerDateChange();
+    this._renderWorkerAttendanceHistory(current.employeeId);
+    showToast('Attendance saved.');
+  },
+
+  _renderWorkerAttendanceHistory(empId) {
+    const data = loadData();
+    const rows = [];
+    Object.entries(data.attendance || {}).forEach(([key, monthData]) => {
+      if (!key.startsWith(`${empId}|`)) return;
+      const month = key.split('|')[1];
+      Object.keys(monthData || {}).forEach(day => {
+        const dateStr = `${month}-${String(day).padStart(2, '0')}`;
+        const entry = getAttendanceEntry(data, empId, dateStr);
+        rows.push({ dateStr, ...entry });
+      });
+    });
+    rows.sort((a, b) => b.dateStr.localeCompare(a.dateStr));
+    const tbody = document.getElementById('worker-attendance-tbody');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No attendance records found</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.slice(0, 90).map(r => `<tr>
+      <td>${esc(r.dateStr)}</td>
+      <td>${esc(r.inTime || '-')}</td>
+      <td>${esc(r.outTime || '-')}</td>
+      <td>${formatOtHours(r.otHours || 0)}</td>
+      <td>${esc(r.status || 'P')}</td>
+    </tr>`).join('');
   },
 
   // ── Payroll Reports ──────────────────────────────────────────────────────────
@@ -1170,6 +1505,7 @@ const app = {
   },
 
   deleteRecord(id) {
+    if (!this._requireAdmin()) return;
     const data = loadData();
     data.salaryRecords = data.salaryRecords.filter(r => r.id !== id);
     saveData(data);

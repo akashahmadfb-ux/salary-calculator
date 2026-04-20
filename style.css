@@ -35,6 +35,39 @@ body {
   overflow-x: hidden;
 }
 
+body.auth-required .sidebar,
+body.auth-required .main-content,
+body.auth-required .sidebar-toggle {
+  display: none;
+}
+
+.login-screen {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0a2342, #0d7377);
+  z-index: 3000;
+  padding: 16px;
+}
+
+.login-screen.show { display: flex; }
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: var(--shadow-lg);
+}
+
+.login-card h1 { color: var(--primary-dark); font-size: 22px; margin-bottom: 6px; }
+.login-card p { color: var(--text-secondary); margin-bottom: 18px; }
+.login-btn { width: 100%; justify-content: center; }
+#loginHint { display: block; margin-top: 14px; color: var(--text-secondary); }
+
 /* ─── Sidebar ──────────────────────────────────────────────────────────────── */
 
 .sidebar {
@@ -119,6 +152,7 @@ body {
 .company-name-input:focus { border-color: var(--accent); }
 
 .version { color: rgba(255,255,255,.40); font-size: 11px; }
+.session-user { color: rgba(255,255,255,.85); margin-bottom: 8px; font-size: 12px; }
 
 .sidebar-toggle {
   display: none;
@@ -698,6 +732,46 @@ body {
   color: var(--text-primary);
   font-family: inherit;
 }
+
+.att-time-input {
+  width: 100%;
+  min-width: 110px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.att-lock-badge {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 12px;
+  padding: 4px 8px;
+  display: inline-block;
+}
+
+.att-lock-badge.locked { background: #fee2e2; color: #991b1b; }
+.att-lock-badge.open { background: #dcfce7; color: #166534; }
+.att-lock-msg { color: var(--danger); font-size: 12px; font-weight: 600; align-self: center; }
+
+.worker-profile {
+  padding: 16px 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.worker-profile-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fffe;
+}
+
+.worker-profile-item small { color: var(--text-secondary); display: block; margin-bottom: 5px; }
+.worker-profile-item strong { color: var(--text-primary); }
 
 .att-status-select:focus {
   outline: none;

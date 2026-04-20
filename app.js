@@ -19,10 +19,7 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const database = getDatabase(firebaseApp);
 const auth = getAuth(firebaseApp);
-let analytics = null;
-try { analytics = getAnalytics(firebaseApp); } catch (e) { analytics = null; }
-
-void analytics;
+try { getAnalytics(firebaseApp); } catch (e) { /* Analytics may be unavailable in some environments */ }
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
@@ -55,6 +52,11 @@ function normalizeData(raw) {
 
 function getUserDataPath(uid) {
   return `${DATA_ROOT}/${uid}`;
+}
+
+function getNextSalaryRecordId() {
+  if (!currentUserId) return uid();
+  return push(ref(database, `${getUserDataPath(currentUserId)}/salaryRecords`)).key || uid();
 }
 
 async function loadUserDataFromCloud(uid) {
@@ -923,7 +925,7 @@ const app = {
     const existIdx = data.salaryRecords.findIndex(r => r.employeeId === empId && r.month === month);
 
     const record = {
-      id:               existIdx !== -1 ? data.salaryRecords[existIdx].id : (push(ref(database, `${getUserDataPath(currentUserId)}/salaryRecords`)).key || uid()),
+      id:               existIdx !== -1 ? data.salaryRecords[existIdx].id : getNextSalaryRecordId(),
       employeeId:       empId,
       month,
       basicSalary:      basic,

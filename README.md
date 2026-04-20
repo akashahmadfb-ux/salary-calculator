@@ -22,8 +22,7 @@ A fully client-side web application for managing garment factory employee salari
 Open `index.html` in any modern browser — no build step or server required.
 
 1. Sign in as Admin or Worker on the login page.
-   - Demo admin: `admin@tracs.local` / `admin123`
-   - Demo worker: `worker@tracs.local` / `worker123`
+   - Configure Firebase keys in `app.js` and use Firebase Authentication users.
 2. Set your **Company Name** in the sidebar footer (used in PDF headers).
 3. Go to **Employees** → Add Employee to create worker profiles.
 4. Go to **Salary Entry** → select an employee, fill OT hours / bonus / deductions, and save.

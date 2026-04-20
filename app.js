@@ -14,10 +14,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: 'YOUR_FIREBASE_MESSAGING_SENDER_ID',
   appId: 'YOUR_FIREBASE_APP_ID',
 };
-const DEMO_USERS = [
-  { email: 'admin@tracs.local', password: 'admin123', role: 'admin' },
-  { email: 'worker@tracs.local', password: 'worker123', role: 'worker', employeeId: null },
-];
+const DEMO_USERS = Array.isArray(window.TRACS_DEMO_USERS) ? window.TRACS_DEMO_USERS : [];
 let memoryData = null;
 
 function defaultData() {
@@ -33,7 +30,7 @@ function defaultData() {
 function saveData(data) {
   memoryData = { ...data };
   app._data = memoryData;
-  if (app._cloudEnabled) app._persistToCloud();
+  if (app._cloudEnabled) app._queueCloudPersist();
 }
 
 function loadData() {
@@ -50,7 +47,15 @@ function normalizeDataShape(data) {
 }
 
 function isFirebaseConfigured() {
-  return Object.values(FIREBASE_CONFIG).every(v => v && !String(v).startsWith('YOUR_FIREBASE_'));
+  const placeholders = {
+    apiKey: 'YOUR_FIREBASE_API_KEY',
+    authDomain: 'YOUR_FIREBASE_AUTH_DOMAIN',
+    projectId: 'YOUR_FIREBASE_PROJECT_ID',
+    storageBucket: 'YOUR_FIREBASE_STORAGE_BUCKET',
+    messagingSenderId: 'YOUR_FIREBASE_MESSAGING_SENDER_ID',
+    appId: 'YOUR_FIREBASE_APP_ID',
+  };
+  return Object.keys(placeholders).every(key => FIREBASE_CONFIG[key] && FIREBASE_CONFIG[key] !== placeholders[key]);
 }
 
 function minutesFromTime(timeStr) {
@@ -63,6 +68,12 @@ function computeOtHours(outTime) {
   const outMinutes = minutesFromTime(outTime);
   if (outMinutes === null) return 0;
   return Math.max(0, (outMinutes - OFFICE_END_MINUTES) / 60);
+}
+
+async function sha256Hex(input) {
+  const encoded = new TextEncoder().encode(input || '');
+  const digest = await crypto.subtle.digest('SHA-256', encoded);
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 function canWorkerEditDate(dateStr) {
@@ -238,6 +249,7 @@ const app = {
   _firebaseAuth:    null,
   _firebaseDb:      null,
   _currentUser:     null,
+  _persistPromise:  null,
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
 
@@ -249,7 +261,7 @@ const app = {
     this._data = await this._fetchInitialData();
     const loginHint = document.getElementById('loginHint');
     if (loginHint && !this._cloudEnabled) {
-      loginHint.textContent = 'Demo credentials: admin@tracs.local / admin123 or worker@tracs.local / worker123';
+      loginHint.textContent = 'Firebase keys are placeholders. Add real Firebase keys and Auth users in app.js.';
     }
 
     document.getElementById('currentDate').textContent =
@@ -303,6 +315,7 @@ const app = {
 
     this.navigateTo('dashboard');
     this._updateAuthUi();
+    this._restoreCloudSession();
   },
 
   async _initCloud() {
@@ -336,6 +349,30 @@ const app = {
     } catch (err) {
       showToast('Cloud sync failed for latest change.', 'warning');
     }
+  },
+
+  _queueCloudPersist() {
+    if (!this._cloudEnabled) return;
+    if (!this._persistPromise) this._persistPromise = Promise.resolve();
+    this._persistPromise = this._persistPromise
+      .then(() => this._persistToCloud())
+      .catch(() => undefined);
+  },
+
+  _restoreCloudSession() {
+    if (!this._cloudEnabled || !this._firebaseAuth) return;
+    this._firebaseAuth.onAuthStateChanged(user => {
+      if (!user) return;
+      const email = (user.email || '').toLowerCase();
+      const users = (loadData().users || []);
+      const profile = users.find(u => u.uid === user.uid || (u.email || '').toLowerCase() === email);
+      if (!profile) return;
+      this._currentUser = { role: profile.role, email: profile.email, employeeId: profile.employeeId || null };
+      document.getElementById('loginScreen').classList.remove('show');
+      document.body.classList.remove('auth-required');
+      this._updateAuthUi();
+      this.navigateTo(profile.role === 'worker' ? 'worker-dashboard' : 'dashboard');
+    });
   },
 
   _updateAuthUi() {
@@ -372,14 +409,23 @@ const app = {
       try {
         const cred = await this._firebaseAuth.signInWithEmailAndPassword(email, password);
         const uid = cred?.user?.uid;
-        const users = (loadData().users || []);
+        const snapshot = await this._firebaseDb.collection('tracs').doc('appData').get();
+        const users = normalizeDataShape(snapshot.exists ? snapshot.data() : defaultData()).users || [];
         profile = users.find(u => u.uid === uid || (u.email || '').toLowerCase() === email) || null;
+        if (profile) {
+          this._data = normalizeDataShape(snapshot.exists ? snapshot.data() : defaultData());
+        }
       } catch (err) {
         showToast('Login failed. Check credentials or Firebase setup.', 'error');
         return;
       }
     } else {
-      profile = DEMO_USERS.find(u => u.email === email && u.password === password) || null;
+      if (!DEMO_USERS.length) {
+        showToast('Firebase is not configured. Add Firebase keys to enable login.', 'error');
+        return;
+      }
+      const pwdHash = await sha256Hex(password);
+      profile = DEMO_USERS.find(u => u.email === email && u.passwordHash === pwdHash) || null;
     }
 
     if (!profile || profile.role !== role) {
@@ -1078,8 +1124,7 @@ const app = {
     const days = getDaysInMonth(this._attMonth);
     let absent = 0;
     for (let d = 1; d <= days; d++) {
-      const v = this._tempAttendance[d];
-      const status = typeof v === 'string' ? v : ((v && v.status) || 'P');
+      const status = this._tempAttendance[d] || 'P';
       if (status === 'A') absent++;
     }
     document.getElementById('se-absent-days').value          = absent;
@@ -1163,8 +1208,8 @@ const app = {
       return `<tr>
         <td>${esc(emp.name)}</td>
         <td>${esc(emp.id)}</td>
-        <td><input class="att-time-input" type="time" value="${esc(entry.inTime || '')}" onchange="app.setAttendanceTimeForDate('${esc(emp.id)}','${dateStr}','inTime', this.value)"></td>
-        <td><input class="att-time-input" type="time" value="${esc(entry.outTime || '')}" onchange="app.setAttendanceTimeForDate('${esc(emp.id)}','${dateStr}','outTime', this.value)"></td>
+        <td><input class="att-time-input" type="time" value="${esc(entry.inTime || '')}" onchange="app.setAttendanceTimeForDate('${esc(emp.id)}','${esc(dateStr)}','inTime', this.value)"></td>
+        <td><input class="att-time-input" type="time" value="${esc(entry.outTime || '')}" onchange="app.setAttendanceTimeForDate('${esc(emp.id)}','${esc(dateStr)}','outTime', this.value)"></td>
         <td>${formatOtHours(entry.otHours || 0)}</td>
         <td>
           <select class="att-status-select" onchange="app.setAttendanceForDate('${esc(emp.id)}', this.value)">
@@ -1216,15 +1261,16 @@ const app = {
     const current = this._currentUser;
     if (!current || current.role !== 'worker') return;
     const data = loadData();
-    let employee = data.employees.find(e => e.id === current.employeeId);
-    if (!employee) employee = data.employees[0] || null;
+    const employee = data.employees.find(e => e.id === current.employeeId);
 
     const profileEl = document.getElementById('workerProfile');
     if (!employee) {
-      profileEl.innerHTML = '<div class="empty-state-full"><p>No employee profile is linked to this worker.</p></div>';
+      profileEl.innerHTML = '<div class="empty-state-full"><p>No employee profile is linked to this worker account.</p></div>';
+      document.getElementById('worker-attendance-tbody').innerHTML = '<tr><td colspan="5" class="empty-state">No linked profile</td></tr>';
+      document.getElementById('worker-att-save-btn').disabled = true;
       return;
     }
-    current.employeeId = employee.id;
+    document.getElementById('worker-att-save-btn').disabled = false;
 
     profileEl.innerHTML = `
       <div class="worker-profile-item"><small>Name</small><strong>${esc(employee.name)}</strong></div>
@@ -1279,8 +1325,6 @@ const app = {
       outTime,
       status: (inTime || outTime) ? 'P' : 'A',
       otHours: computeOtHours(outTime),
-      updatedByRole: 'worker',
-      updatedAt: Date.now(),
     });
     saveData(data);
     this.onWorkerDateChange();

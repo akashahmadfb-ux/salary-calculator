@@ -29,7 +29,14 @@ const STATIC_PASSWORD = 'tracsadmin';
 let dataCache = defaultData();
 
 function defaultData() {
-  return { companyName: 'TRACS APPAREL', employees: [], salaryRecords: [], attendance: {} };
+  return {
+    companyName:    'TRACS APPAREL',
+    employees:      [],
+    salaryRecords:  [],
+    attendance:     {},
+    timeRecords:    {},
+    tiffinBillRate: 50,
+  };
 }
 
 function cloneData(data) {
@@ -40,10 +47,12 @@ function normalizeData(raw) {
   const base = defaultData();
   const safe = raw && typeof raw === 'object' ? raw : {};
   return {
-    companyName: (typeof safe.companyName === 'string' && safe.companyName.trim()) ? safe.companyName : base.companyName,
-    employees: Array.isArray(safe.employees) ? safe.employees : [],
-    salaryRecords: Array.isArray(safe.salaryRecords) ? safe.salaryRecords : [],
-    attendance: safe.attendance && typeof safe.attendance === 'object' ? safe.attendance : {},
+    companyName:    (typeof safe.companyName === 'string' && safe.companyName.trim()) ? safe.companyName : base.companyName,
+    employees:      Array.isArray(safe.employees) ? safe.employees : [],
+    salaryRecords:  Array.isArray(safe.salaryRecords) ? safe.salaryRecords : [],
+    attendance:     safe.attendance && typeof safe.attendance === 'object' ? safe.attendance : {},
+    timeRecords:    safe.timeRecords && typeof safe.timeRecords === 'object' ? safe.timeRecords : {},
+    tiffinBillRate: (typeof safe.tiffinBillRate === 'number' && safe.tiffinBillRate >= 0) ? safe.tiffinBillRate : base.tiffinBillRate,
   };
 }
 
@@ -128,11 +137,102 @@ function setAttendanceStatus(data, empId, dateStr, status) {
   data.attendance[key][day] = status;
 }
 
-function calcSalary(basic, otHours, bonus, festivalBonus, absentDays, daysInMonth, deductions, advance) {
+function calcSalary(basic, otHours, bonus, festivalBonus, absentDays, daysInMonth, deductions, advance, tiffinBills = 0) {
   const otAmount        = otHours * (basic * OT_RATE_FACTOR);
   const absentDeduction = daysInMonth > 0 ? (basic / daysInMonth) * absentDays : 0;
-  const total           = Math.max(0, basic + otAmount + bonus + festivalBonus - absentDeduction - deductions - advance);
+  const total           = Math.max(0, basic + otAmount + bonus + festivalBonus + tiffinBills - absentDeduction - deductions - advance);
   return { otAmount, absentDeduction, total };
+}
+
+// ─── Time & Shift Helpers ──────────────────────────────────────────────────────
+
+const SHIFT_START_GRACE = '08:05'; // 8:00 AM + 5 min grace
+const SHIFT_END         = '17:00'; // 5:00 PM
+const TIFFIN_THRESHOLD  = '19:00'; // 7:00 PM
+
+/** Parse "HH:MM" into minutes from midnight */
+function timeToMinutes(timeStr) {
+  if (!timeStr) return null;
+  const [h, m] = timeStr.split(':').map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+  return h * 60 + m;
+}
+
+/** Is the given HH:MM time considered late? (> 08:05) */
+function isLateArrival(inTime) {
+  const mins = timeToMinutes(inTime);
+  if (mins === null) return false;
+  return mins > timeToMinutes(SHIFT_START_GRACE);
+}
+
+/** Return OT hours based on outTime and whether it is weekend duty. */
+function calcOtHours(inTime, outTime, isWeekendDuty) {
+  const outMins = timeToMinutes(outTime);
+  if (outMins === null) return 0;
+  if (isWeekendDuty) {
+    const inMins  = timeToMinutes(inTime);
+    const worked  = inMins !== null ? (outMins - inMins) : 0;
+    return worked > 0 ? worked / 60 : 0;
+  }
+  const shiftEndMins = timeToMinutes(SHIFT_END);
+  const overtime = outMins - shiftEndMins;
+  return overtime > 0 ? overtime / 60 : 0;
+}
+
+/** Return tiffin bill amount if outTime > 19:00, else 0. */
+function calcTiffinBill(outTime, rate) {
+  const outMins = timeToMinutes(outTime);
+  if (outMins === null) return 0;
+  return outMins > timeToMinutes(TIFFIN_THRESHOLD) ? (rate || 0) : 0;
+}
+
+/**
+ * Compute monthly stats from time records + attendance.
+ * Returns { totalOtHours, totalTiffinBills, lateCount, penaltyAbsents, effectiveAbsentDays }
+ * 'effectiveAbsentDays' = actual A days + penaltyAbsents (from Late)
+ */
+function getMonthTimeStats(data, empId, month) {
+  if (!empId || !month) return { totalOtHours: 0, totalTiffinBills: 0, lateCount: 0, penaltyAbsents: 0, effectiveAbsentDays: 0 };
+  const key       = `${empId}|${month}`;
+  const att       = (data.attendance  || {})[key] || {};
+  const times     = (data.timeRecords || {})[key] || {};
+  const days      = getDaysInMonth(month);
+  let   totalOt   = 0, totalTiffin = 0, lateCount = 0, absentCount = 0;
+
+  for (let d = 1; d <= days; d++) {
+    const status  = att[d] || 'P';
+    const tr      = times[d] || {};
+    if (status === 'A') absentCount++;
+    if (status === 'L') lateCount++;
+    totalOt     += tr.otHours    || 0;
+    totalTiffin += tr.tiffinBill || 0;
+  }
+
+  const penaltyAbsents    = Math.floor(lateCount / 3);
+  const effectiveAbsentDays = absentCount + penaltyAbsents;
+
+  return { totalOtHours: totalOt, totalTiffinBills: totalTiffin, lateCount, penaltyAbsents, effectiveAbsentDays };
+}
+
+/** Get/set a time record for a single day. */
+function getTimeRecord(data, empId, dateStr) {
+  if (!empId || !dateStr) return {};
+  const month = monthFromDate(dateStr);
+  const day   = dayFromDate(dateStr);
+  if (!month || !day) return {};
+  const key = `${empId}|${month}`;
+  return ((data.timeRecords || {})[key] || {})[day] || {};
+}
+
+function setTimeRecord(data, empId, dateStr, record) {
+  if (!empId || !dateStr) return;
+  const month = monthFromDate(dateStr);
+  const day   = dayFromDate(dateStr);
+  if (!month || !day) return;
+  if (!data.timeRecords) data.timeRecords = {};
+  const key = `${empId}|${month}`;
+  if (!data.timeRecords[key]) data.timeRecords[key] = {};
+  data.timeRecords[key][day] = { ...((data.timeRecords[key][day]) || {}), ...record };
 }
 
 // ─── Utilities ─────────────────────────────────────────────────────────────────
@@ -243,6 +343,16 @@ const app = {
       await saveData(d);
     });
 
+    const tiffinRateInput = document.getElementById('tiffinRateInput');
+    if (tiffinRateInput) {
+      tiffinRateInput.addEventListener('change', async e => {
+        const d = loadData();
+        d.tiffinBillRate = Math.max(0, parseFloat(e.target.value) || 50);
+        await saveData(d);
+        showToast('Tiffin rate updated!', 'info');
+      });
+    }
+
     const loginForm = document.getElementById('loginForm');
     if (loginForm) loginForm.addEventListener('submit', e => this.login(e));
 
@@ -302,6 +412,8 @@ const app = {
     const data = loadData();
     const input = document.getElementById('companyNameInput');
     if (input) input.value = data.companyName || 'TRACS APPAREL';
+    const tiffinEl = document.getElementById('tiffinRateInput');
+    if (tiffinEl) tiffinEl.value = data.tiffinBillRate !== undefined ? data.tiffinBillRate : 50;
   },
 
   _showLogin(show) {
@@ -585,6 +697,7 @@ const app = {
           <p class="emp-id"><i class="fas fa-id-badge"></i> ${esc(emp.id)}</p>
           ${emp.department ? `<p><i class="fas fa-building"></i> ${esc(emp.department)}</p>` : ''}
           <p class="emp-salary"><i class="fas fa-money-bill"></i> Basic: ${fmt(emp.basicSalary)}</p>
+          <p class="emp-loan"><i class="fas fa-hand-holding-usd"></i> Loan Balance: <span class="${(emp.loanBalance || 0) > 0 ? 'amount-negative' : ''}">${fmt(emp.loanBalance || 0)}</span></p>
         </div>
         <div class="emp-card-footer">
           <button class="btn btn-sm btn-primary" onclick="app.openSalaryEntry('${esc(emp.id)}')">
@@ -608,6 +721,8 @@ const app = {
     document.getElementById('employeeModalTitle').textContent = 'Add Employee';
     document.getElementById('employeeForm').reset();
     document.getElementById('emp-edit-id').value = '';
+    const loanEl = document.getElementById('emp-loan-balance');
+    if (loanEl) loanEl.value = '0';
     document.getElementById('photoPreview').innerHTML = '<i class="fas fa-user"></i>';
     document.getElementById('employeeModal').classList.add('show');
   },
@@ -626,6 +741,8 @@ const app = {
     document.getElementById('emp-basic').value      = emp.basicSalary;
     document.getElementById('emp-department').value = emp.department || '';
     document.getElementById('emp-edit-id').value    = id;
+    const loanEl = document.getElementById('emp-loan-balance');
+    if (loanEl) loanEl.value = emp.loanBalance || 0;
 
     const prev = document.getElementById('photoPreview');
     prev.innerHTML = emp.photo
@@ -661,12 +778,14 @@ const app = {
 
   async saveEmployee(evt) {
     evt.preventDefault();
-    const data   = loadData();
-    const name   = document.getElementById('emp-name').value.trim();
-    const id     = document.getElementById('emp-id').value.trim();
-    const basic  = parseFloat(document.getElementById('emp-basic').value) || 0;
-    const dept   = document.getElementById('emp-department').value.trim();
-    const editId = document.getElementById('emp-edit-id').value;
+    const data       = loadData();
+    const name       = document.getElementById('emp-name').value.trim();
+    const id         = document.getElementById('emp-id').value.trim();
+    const basic      = parseFloat(document.getElementById('emp-basic').value) || 0;
+    const dept       = document.getElementById('emp-department').value.trim();
+    const editId     = document.getElementById('emp-edit-id').value;
+    const loanEl     = document.getElementById('emp-loan-balance');
+    const loanBalance = loanEl ? (parseFloat(loanEl.value) || 0) : 0;
 
     if (data.employees.some(e => e.id === id && e.id !== editId)) {
       showToast('Employee ID already exists!', 'error');
@@ -677,7 +796,7 @@ const app = {
     if (editId) {
       const idx = data.employees.findIndex(e => e.id === editId);
       if (idx !== -1) {
-        data.employees[idx] = { ...data.employees[idx], name, id, basicSalary: basic, department: dept, photo: this._photo };
+        data.employees[idx] = { ...data.employees[idx], name, id, basicSalary: basic, department: dept, photo: this._photo, loanBalance };
         if (editId !== id) {
           data.salaryRecords.forEach(r => { if (r.employeeId === editId) r.employeeId = id; });
           const attKeys = Object.keys(data.attendance || {}).filter(k => k.startsWith(editId + '|'));
@@ -686,11 +805,17 @@ const app = {
             data.attendance[newKey] = data.attendance[oldKey];
             delete data.attendance[oldKey];
           });
+          const trKeys = Object.keys(data.timeRecords || {}).filter(k => k.startsWith(editId + '|'));
+          trKeys.forEach(oldKey => {
+            const newKey = id + '|' + oldKey.split('|')[1];
+            data.timeRecords[newKey] = data.timeRecords[oldKey];
+            delete data.timeRecords[oldKey];
+          });
         }
       }
       showToast('Employee updated!');
     } else {
-      data.employees.push({ name, id, basicSalary: basic, department: dept, photo: this._photo, createdAt: Date.now() });
+      data.employees.push({ name, id, basicSalary: basic, department: dept, photo: this._photo, loanBalance, createdAt: Date.now() });
       showToast('Employee added!');
     }
 
@@ -717,6 +842,9 @@ const app = {
     data.salaryRecords = data.salaryRecords.filter(r => r.employeeId !== id);
     Object.keys(data.attendance || {}).forEach(k => {
       if (k.startsWith(id + '|')) delete data.attendance[k];
+    });
+    Object.keys(data.timeRecords || {}).forEach(k => {
+      if (k.startsWith(id + '|')) delete data.timeRecords[k];
     });
     await saveData(data);
     this.closeConfirmModal();
@@ -802,6 +930,9 @@ const app = {
     const empId = document.getElementById('se-employee').value;
     const emp   = data.employees.find(e => e.id === empId);
     document.getElementById('se-basic').value = emp ? emp.basicSalary : '';
+    // Show loan balance
+    const loanEl = document.getElementById('se-loan-balance');
+    if (loanEl) loanEl.textContent = emp ? fmt(emp.loanBalance || 0) : fmt(0);
     this._syncAbsentDays();
     this.calcPreview();
   },
@@ -817,20 +948,28 @@ const app = {
     const month = document.getElementById('se-month').value;
 
     if (empId && month) {
-      const key        = `${empId}|${month}`;
-      const attendance = (data.attendance || {})[key] || {};
-      const days       = getDaysInMonth(month);
-      let   absent     = 0;
-      for (let d = 1; d <= days; d++) {
-        if ((attendance[d] || 'P') === 'A') absent++;
-      }
-      document.getElementById('se-absent-days').value          = absent;
-      document.getElementById('att-absent-count').textContent  = absent;
-      document.getElementById('att-month-days').textContent    = `/ ${days} days in month`;
+      const stats  = getMonthTimeStats(data, empId, month);
+      const days   = getDaysInMonth(month);
+
+      document.getElementById('se-absent-days').value         = stats.effectiveAbsentDays;
+      document.getElementById('att-absent-count').textContent = stats.effectiveAbsentDays;
+      document.getElementById('att-month-days').textContent   = `/ ${days} days in month`;
+
+      // Auto-fill OT hours, penalty absents, tiffin bills
+      const otEl      = document.getElementById('se-ot-hours');
+      const tiffinEl  = document.getElementById('se-tiffin-bills');
+      const penaltyEl = document.getElementById('se-penalty-absents');
+      if (otEl && !parseFloat(otEl.value)) otEl.value = stats.totalOtHours.toFixed(2);
+      if (tiffinEl) tiffinEl.value = stats.totalTiffinBills.toFixed(2);
+      if (penaltyEl) penaltyEl.value = stats.penaltyAbsents;
     } else {
-      document.getElementById('se-absent-days').value          = 0;
-      document.getElementById('att-absent-count').textContent  = '0';
-      document.getElementById('att-month-days').textContent    = '';
+      document.getElementById('se-absent-days').value         = 0;
+      document.getElementById('att-absent-count').textContent = '0';
+      document.getElementById('att-month-days').textContent   = '';
+      const tiffinEl  = document.getElementById('se-tiffin-bills');
+      const penaltyEl = document.getElementById('se-penalty-absents');
+      if (tiffinEl)  tiffinEl.value  = '0';
+      if (penaltyEl) penaltyEl.value = '0';
     }
   },
 
@@ -850,16 +989,18 @@ const app = {
     const deductions    = parseFloat(document.getElementById('se-deductions').value)     || 0;
     const advance       = parseFloat(document.getElementById('se-advance').value)        || 0;
     const absentDays    = parseInt(document.getElementById('se-absent-days').value)      || 0;
+    const tiffinBills   = parseFloat(document.getElementById('se-tiffin-bills')?.value)  || 0;
     const month         = document.getElementById('se-month').value;
     const daysInMonth   = month ? getDaysInMonth(month) : 30;
 
     const { otAmount, absentDeduction, total } =
-      calcSalary(basic, otHours, bonus, festivalBonus, absentDays, daysInMonth, deductions, advance);
+      calcSalary(basic, otHours, bonus, festivalBonus, absentDays, daysInMonth, deductions, advance, tiffinBills);
 
     document.getElementById('prev-basic').textContent          = fmt(basic);
     document.getElementById('prev-ot').textContent             = fmt(otAmount);
     document.getElementById('prev-bonus').textContent          = fmt(bonus);
     document.getElementById('prev-festival-bonus').textContent = fmt(festivalBonus);
+    document.getElementById('prev-tiffin-bills').textContent   = fmt(tiffinBills);
     document.getElementById('prev-absent-ded').textContent     = fmt(absentDeduction);
     document.getElementById('prev-deductions').textContent     = fmt(deductions);
     document.getElementById('prev-advance').textContent        = fmt(advance);
@@ -878,12 +1019,14 @@ const app = {
     const deductions    = parseFloat(document.getElementById('se-deductions').value)     || 0;
     const advance       = parseFloat(document.getElementById('se-advance').value)        || 0;
     const absentDays    = parseInt(document.getElementById('se-absent-days').value)      || 0;
+    const tiffinBills   = parseFloat(document.getElementById('se-tiffin-bills')?.value)  || 0;
+    const penaltyAbsents = parseInt(document.getElementById('se-penalty-absents')?.value) || 0;
     const daysInMonth   = month ? getDaysInMonth(month) : 30;
 
     if (!empId || !month) { showToast('Select employee and month!', 'error'); return; }
 
     const { otAmount, absentDeduction, total } =
-      calcSalary(basic, otHours, bonus, festivalBonus, absentDays, daysInMonth, deductions, advance);
+      calcSalary(basic, otHours, bonus, festivalBonus, absentDays, daysInMonth, deductions, advance, tiffinBills);
 
     const existIdx = data.salaryRecords.findIndex(r => r.employeeId === empId && r.month === month);
 
@@ -898,6 +1041,8 @@ const app = {
       festivalBonus,
       absentDays,
       absentDeduction,
+      tiffinBills,
+      penaltyAbsents,
       deductions,
       advance,
       totalSalary:      total,
@@ -912,19 +1057,30 @@ const app = {
       showToast('Record saved!');
     }
 
+    // Update loan balance if advance deducted
+    if (advance > 0) {
+      const empIdx = data.employees.findIndex(e => e.id === empId);
+      if (empIdx !== -1) {
+        const prev = data.employees[empIdx].loanBalance || 0;
+        data.employees[empIdx].loanBalance = Math.max(0, prev - advance);
+      }
+    }
+
     await saveData(data);
     this.resetSalaryForm();
     this.renderPayrollReports();
   },
 
   resetSalaryForm() {
-    const zeroFields = ['se-ot-hours', 'se-bonus', 'se-festival-bonus', 'se-deductions', 'se-advance'];
-    document.getElementById('se-employee').value         = '';
-    document.getElementById('se-basic').value            = '';
-    document.getElementById('se-absent-days').value      = '0';
+    const zeroFields = ['se-ot-hours', 'se-bonus', 'se-festival-bonus', 'se-deductions', 'se-advance', 'se-tiffin-bills', 'se-penalty-absents'];
+    document.getElementById('se-employee').value            = '';
+    document.getElementById('se-basic').value               = '';
+    document.getElementById('se-absent-days').value         = '0';
     document.getElementById('att-absent-count').textContent = '0';
     document.getElementById('att-month-days').textContent   = '';
-    zeroFields.forEach(id => { document.getElementById(id).value = '0'; });
+    zeroFields.forEach(id => { const el = document.getElementById(id); if (el) el.value = '0'; });
+    const loanEl = document.getElementById('se-loan-balance');
+    if (loanEl) loanEl.textContent = fmt(0);
     this.calcPreview();
   },
 
@@ -973,8 +1129,9 @@ const app = {
   },
 
   toggleAttDay(day) {
+    const cycle = { P: 'A', A: 'H', H: 'L', L: 'SL', SL: 'CL', CL: 'P' };
     const current = this._tempAttendance[day] || 'P';
-    const next    = { P: 'A', A: 'H', H: 'P' }[current];
+    const next    = cycle[current] || 'P';
     this._tempAttendance[day] = next;
 
     const cell = document.querySelector(`.att-day[data-day="${day}"]`);
@@ -987,16 +1144,25 @@ const app = {
 
   _updateAttSummary() {
     const days = getDaysInMonth(this._attMonth);
-    let p = 0, a = 0, h = 0;
+    let p = 0, a = 0, h = 0, l = 0, sl = 0, cl = 0;
     for (let d = 1; d <= days; d++) {
       const s = this._tempAttendance[d] || 'P';
-      if (s === 'P') p++;
-      else if (s === 'A') a++;
-      else if (s === 'H') h++;
+      if      (s === 'P')  p++;
+      else if (s === 'A')  a++;
+      else if (s === 'H')  h++;
+      else if (s === 'L')  l++;
+      else if (s === 'SL') sl++;
+      else if (s === 'CL') cl++;
     }
-    document.getElementById('att-sum-p').textContent = p;
-    document.getElementById('att-sum-a').textContent = a;
-    document.getElementById('att-sum-h').textContent = h;
+    document.getElementById('att-sum-p').textContent  = p;
+    document.getElementById('att-sum-a').textContent  = a;
+    document.getElementById('att-sum-h').textContent  = h;
+    const lEl  = document.getElementById('att-sum-l');
+    const slEl = document.getElementById('att-sum-sl');
+    const clEl = document.getElementById('att-sum-cl');
+    if (lEl)  lEl.textContent  = l;
+    if (slEl) slEl.textContent = sl;
+    if (clEl) clEl.textContent = cl;
   },
 
   async saveAttendance() {
@@ -1006,14 +1172,13 @@ const app = {
     data.attendance[key] = { ...this._tempAttendance };
     await saveData(data);
 
-    const days = getDaysInMonth(this._attMonth);
-    let absent = 0;
-    for (let d = 1; d <= days; d++) {
-      if ((this._tempAttendance[d] || 'P') === 'A') absent++;
-    }
-    document.getElementById('se-absent-days').value          = absent;
-    document.getElementById('att-absent-count').textContent  = absent;
-    document.getElementById('att-month-days').textContent    = `/ ${days} days in month`;
+    const stats = getMonthTimeStats(data, this._attEmpId, this._attMonth);
+    const days  = getDaysInMonth(this._attMonth);
+    document.getElementById('se-absent-days').value         = stats.effectiveAbsentDays;
+    document.getElementById('att-absent-count').textContent = stats.effectiveAbsentDays;
+    document.getElementById('att-month-days').textContent   = `/ ${days} days in month`;
+    const penaltyEl = document.getElementById('se-penalty-absents');
+    if (penaltyEl) penaltyEl.value = stats.penaltyAbsents;
     this.calcPreview();
 
     this.closeAttendanceModal();
@@ -1069,45 +1234,77 @@ const app = {
   },
 
   _renderAttendanceManagementRows(data) {
-    const dateStr = this._attMgmtDate || document.getElementById('att-man-date').value;
-    const tbody = document.getElementById('attendance-list-tbody');
+    const dateStr    = this._attMgmtDate || document.getElementById('att-man-date').value;
+    const tbody      = document.getElementById('attendance-list-tbody');
+    const tiffinRate = data.tiffinBillRate || 50;
     if (!tbody) return;
 
     if (!data.employees.length) {
-      tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No employees found</td></tr>';
-      document.getElementById('att-man-p').textContent = '0';
-      document.getElementById('att-man-a').textContent = '0';
-      document.getElementById('att-man-h').textContent = '0';
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No employees found</td></tr>';
+      document.getElementById('att-man-p').textContent  = '0';
+      document.getElementById('att-man-a').textContent  = '0';
+      document.getElementById('att-man-h').textContent  = '0';
+      const lEl = document.getElementById('att-man-l');
+      if (lEl) lEl.textContent = '0';
       return;
     }
 
-    let p = 0, a = 0, h = 0;
+    let p = 0, a = 0, h = 0, l = 0;
     tbody.innerHTML = data.employees.map(emp => {
       const status = getAttendanceStatus(data, emp.id, dateStr);
-      if (status === 'A') a++;
+      const tr     = getTimeRecord(data, emp.id, dateStr);
+      if      (status === 'A') a++;
       else if (status === 'H') h++;
+      else if (status === 'L') l++;
       else p++;
+
+      const inVal      = tr.inTime      || '';
+      const outVal     = tr.outTime     || '';
+      const wdChecked  = tr.isWeekendDuty ? 'checked' : '';
+      const otHrsDisp  = tr.otHours     !== undefined ? tr.otHours.toFixed(2)  : '0.00';
+      const tiffinDisp = tr.tiffinBill  !== undefined ? tr.tiffinBill.toFixed(2) : '0.00';
+
       return `<tr>
         <td>${esc(emp.name)}</td>
         <td>${esc(emp.id)}</td>
         <td>
           <select class="att-status-select" onchange="app.setAttendanceForDate('${esc(emp.id)}', this.value)">
-            <option value="P" ${status === 'P' ? 'selected' : ''}>Present</option>
-            <option value="A" ${status === 'A' ? 'selected' : ''}>Absent</option>
-            <option value="H" ${status === 'H' ? 'selected' : ''}>Company Holiday</option>
+            <option value="P"  ${status === 'P'  ? 'selected' : ''}>Present</option>
+            <option value="A"  ${status === 'A'  ? 'selected' : ''}>Absent</option>
+            <option value="H"  ${status === 'H'  ? 'selected' : ''}>Company Holiday</option>
+            <option value="L"  ${status === 'L'  ? 'selected' : ''}>Late</option>
+            <option value="SL" ${status === 'SL' ? 'selected' : ''}>Sick Leave (SL)</option>
+            <option value="CL" ${status === 'CL' ? 'selected' : ''}>Casual Leave (CL)</option>
           </select>
         </td>
+        <td>
+          <div class="time-inputs-row">
+            <input type="time" class="time-input" value="${esc(inVal)}" placeholder="In"
+              onchange="app.onTimeChange('${esc(emp.id)}', 'inTime', this.value)" title="In Time">
+            <input type="time" class="time-input" value="${esc(outVal)}" placeholder="Out"
+              onchange="app.onTimeChange('${esc(emp.id)}', 'outTime', this.value)" title="Out Time">
+            <label class="wd-label" title="Weekend/Friday Duty — all worked hours count as OT">
+              <input type="checkbox" ${wdChecked}
+                onchange="app.onWeekendDutyChange('${esc(emp.id)}', this.checked)"> FD
+            </label>
+          </div>
+        </td>
+        <td class="att-ot-cell">${otHrsDisp} hrs</td>
+        <td class="att-tiffin-cell">${fmt(tiffinDisp)}</td>
       </tr>`;
     }).join('');
 
-    document.getElementById('att-man-p').textContent = p;
-    document.getElementById('att-man-a').textContent = a;
-    document.getElementById('att-man-h').textContent = h;
+    document.getElementById('att-man-p').textContent  = p;
+    document.getElementById('att-man-a').textContent  = a;
+    document.getElementById('att-man-h').textContent  = h;
+    const lEl = document.getElementById('att-man-l');
+    if (lEl) lEl.textContent = l;
   },
 
   async setAttendanceForDate(empId, status) {
-    const data = loadData();
+    const data    = loadData();
     const dateStr = document.getElementById('att-man-date').value;
+    // If status is L (Late) and no inTime set yet, mark as L (arrival was late)
     setAttendanceStatus(data, empId, dateStr, status);
     await saveData(data);
     this._attMgmtDate = dateStr;
@@ -1116,6 +1313,59 @@ const app = {
     this.calcPreview();
     this.renderDashboard();
     this.renderPayrollReports();
+  },
+
+  async onTimeChange(empId, field, value) {
+    const data    = loadData();
+    const dateStr = document.getElementById('att-man-date').value;
+    const tiffinRate = data.tiffinBillRate || 50;
+
+    const tr = getTimeRecord(data, empId, dateStr);
+    tr[field] = value;
+
+    // Auto-compute isLate when inTime changes
+    if (field === 'inTime') {
+      tr.isLate = isLateArrival(value);
+      // Auto-mark status as Late if currently Present
+      const currentStatus = getAttendanceStatus(data, empId, dateStr);
+      if (tr.isLate && currentStatus === 'P') {
+        setAttendanceStatus(data, empId, dateStr, 'L');
+      } else if (!tr.isLate && currentStatus === 'L') {
+        setAttendanceStatus(data, empId, dateStr, 'P');
+      }
+    }
+
+    // Auto-compute OT and Tiffin when outTime changes
+    if (field === 'outTime') {
+      const currentTr = getTimeRecord(data, empId, dateStr);
+      const merged = { ...currentTr, ...tr };
+      tr.otHours   = parseFloat(calcOtHours(merged.inTime, value, merged.isWeekendDuty || false).toFixed(2));
+      tr.tiffinBill = calcTiffinBill(value, tiffinRate);
+    }
+
+    setTimeRecord(data, empId, dateStr, tr);
+    await saveData(data);
+    this._attMgmtDate = dateStr;
+    this._renderAttendanceManagementRows(data);
+    this._syncAbsentDays();
+    this.calcPreview();
+  },
+
+  async onWeekendDutyChange(empId, checked) {
+    const data    = loadData();
+    const dateStr = document.getElementById('att-man-date').value;
+    const tr      = getTimeRecord(data, empId, dateStr);
+    tr.isWeekendDuty = checked;
+    // Recalculate OT
+    if (tr.outTime) {
+      tr.otHours = parseFloat(calcOtHours(tr.inTime, tr.outTime, checked).toFixed(2));
+    }
+    setTimeRecord(data, empId, dateStr, tr);
+    await saveData(data);
+    this._attMgmtDate = dateStr;
+    this._renderAttendanceManagementRows(data);
+    this._syncAbsentDays();
+    this.calcPreview();
   },
 
   // ── Payroll Reports ──────────────────────────────────────────────────────────
@@ -1433,12 +1683,13 @@ const app = {
     const label2X = pageW / 2 + 5;
     const value2X = pageW / 2 + 35;
 
-    const rows = [
+    const penaltyStr = record.penaltyAbsents ? `${record.absentDays || 0} (+${record.penaltyAbsents} late penalty)` : String(record.absentDays || 0);
+    const infoRows = [
       ['Name:',         emp.name,                              'Pay Period:',  fmtMonth(record.month)],
       ['Employee ID:',  emp.id,                                'Department:',  emp.department || 'N/A'],
-      ['Basic Salary:', 'BDT ' + fmtPDF(record.basicSalary),  'Absent Days:', String(record.absentDays || 0)],
+      ['Basic Salary:', 'BDT ' + fmtPDF(record.basicSalary),  'Absent Days:', penaltyStr],
     ];
-    rows.forEach((row, i) => {
+    infoRows.forEach((row, i) => {
       const ry = y + 7 + i * 8;
       doc.setFont('helvetica', 'bold');   doc.text(row[0], labelX, ry);
       doc.setFont('helvetica', 'normal'); doc.text(row[1], valueX, ry);
@@ -1448,20 +1699,22 @@ const app = {
 
     y += 36;
 
-    const festBonus = record.festivalBonus || 0;
-    const absentDed = record.absentDeduction || 0;
-    const gross     = record.basicSalary + record.otAmount + record.bonus + festBonus;
-    const totalDed  = absentDed + record.deductions + record.advance;
+    const festBonus   = record.festivalBonus || 0;
+    const tiffinBills = record.tiffinBills   || 0;
+    const absentDed   = record.absentDeduction || 0;
+    const gross       = record.basicSalary + record.otAmount + record.bonus + festBonus + tiffinBills;
+    const totalDed    = absentDed + record.deductions + record.advance;
 
     doc.autoTable({
       startY: y,
       head:   [['EARNINGS', 'Amount (BDT)']],
       body:   [
-        ['Basic Salary',                      fmtPDF(record.basicSalary)],
-        ['Overtime (' + record.otHours + ' hrs)', fmtPDF(record.otAmount)],
-        ['Regular Bonus',                     fmtPDF(record.bonus)],
-        ['Festival Bonus',                    fmtPDF(festBonus)],
-        ['Gross Earnings',                    fmtPDF(gross)],
+        ['Basic Salary',                            fmtPDF(record.basicSalary)],
+        [`Overtime (${record.otHours} hrs)`,        fmtPDF(record.otAmount)],
+        ['Regular Bonus',                           fmtPDF(record.bonus)],
+        ['Festival Bonus',                          fmtPDF(festBonus)],
+        ['Tiffin / Night Allowance',                fmtPDF(tiffinBills)],
+        ['Gross Earnings',                          fmtPDF(gross)],
       ],
       theme:        'grid',
       headStyles:   { fillColor: headerColor, textColor: 255, fontStyle: 'bold', fontSize: 9 },
@@ -1472,14 +1725,16 @@ const app = {
 
     const earningsY = doc.lastAutoTable.finalY;
 
+    const loanBalance = emp.loanBalance || 0;
     doc.autoTable({
       startY: y,
       head:   [['DEDUCTIONS', 'Amount (BDT)']],
       body:   [
-        ['Absent Deduction',   fmtPDF(absentDed)],
-        ['General Deductions', fmtPDF(record.deductions)],
-        ['Advance',            fmtPDF(record.advance)],
-        ['Total Deductions',   fmtPDF(totalDed)],
+        ['Absent Deduction',         fmtPDF(absentDed)],
+        ['General Deductions',       fmtPDF(record.deductions)],
+        ['Advance (this month)',      fmtPDF(record.advance)],
+        ['Total Deductions',         fmtPDF(totalDed)],
+        ['Remaining Loan Balance',   fmtPDF(loanBalance)],
       ],
       theme:        'grid',
       headStyles:   { fillColor: [180, 50, 50], textColor: 255, fontStyle: 'bold', fontSize: 9 },
@@ -1552,16 +1807,18 @@ const app = {
     doc.text(fmtMonth(month), pageW / 2, 28, { align: 'center' });
 
     let totBasic = 0, totOtHrs = 0, totOtAmt = 0, totBonus = 0, totFest = 0,
-        totAbsent = 0, totDed = 0, totNet = 0;
+        totTiffin = 0, totAbsent = 0, totDed = 0, totNet = 0;
 
     const tableRows = records.map((r, i) => {
       const emp      = data.employees.find(e => e.id === r.employeeId);
+      const tiffin   = r.tiffinBills   || 0;
       const totalDed = (r.absentDeduction || 0) + r.deductions + r.advance;
       totBasic  += r.basicSalary;
       totOtHrs  += r.otHours;
       totOtAmt  += r.otAmount;
       totBonus  += r.bonus;
       totFest   += (r.festivalBonus || 0);
+      totTiffin += tiffin;
       totAbsent += (r.absentDays || 0);
       totDed    += totalDed;
       totNet    += r.totalSalary;
@@ -1575,6 +1832,7 @@ const app = {
         fmtPDF(r.otAmount),
         fmtPDF(r.bonus),
         fmtPDF(r.festivalBonus || 0),
+        fmtPDF(tiffin),
         r.absentDays || 0,
         fmtPDF(totalDed),
         fmtPDF(r.totalSalary),
@@ -1583,37 +1841,38 @@ const app = {
 
     const totalRow = [
       '', 'TOTAL', '',
-      fmtPDF(totBasic), totOtHrs, fmtPDF(totOtAmt),
-      fmtPDF(totBonus), fmtPDF(totFest), totAbsent,
+      fmtPDF(totBasic), fmtPDF(totOtHrs), fmtPDF(totOtAmt),
+      fmtPDF(totBonus), fmtPDF(totFest), fmtPDF(totTiffin), totAbsent,
       fmtPDF(totDed),   fmtPDF(totNet),
     ];
     tableRows.push(totalRow);
 
     doc.autoTable({
       startY: 38,
-      head:   [['#', 'Employee Name', 'ID', 'Basic (BDT)', 'OT Hrs', 'OT Amt', 'Bonus', 'Fest. Bonus', 'Absent Days', 'Total Deduction', 'Net Salary (BDT)']],
+      head:   [['#', 'Employee Name', 'ID', 'Basic (BDT)', 'OT Hrs', 'OT Amt', 'Bonus', 'Fest. Bonus', 'Tiffin', 'Absent Days', 'Total Deduction', 'Net Salary (BDT)']],
       body:   tableRows,
       theme:  'grid',
-      headStyles:  { fillColor: headerColor, textColor: 255, fontStyle: 'bold', fontSize: 8 },
-      styles:      { fontSize: 8, cellPadding: 2.5 },
+      headStyles:  { fillColor: headerColor, textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
+      styles:      { fontSize: 7.5, cellPadding: 2 },
       columnStyles: {
-        0:  { cellWidth: 8,  halign: 'center' },
-        1:  { cellWidth: 40 },
-        2:  { cellWidth: 18, halign: 'center' },
+        0:  { cellWidth: 7,  halign: 'center' },
+        1:  { cellWidth: 36 },
+        2:  { cellWidth: 16, halign: 'center' },
         3:  { halign: 'right' },
-        4:  { cellWidth: 12, halign: 'center' },
+        4:  { cellWidth: 11, halign: 'center' },
         5:  { halign: 'right' },
         6:  { halign: 'right' },
         7:  { halign: 'right' },
-        8:  { cellWidth: 14, halign: 'center' },
-        9:  { halign: 'right' },
-        10: { halign: 'right', fontStyle: 'bold' },
+        8:  { halign: 'right' },
+        9:  { cellWidth: 13, halign: 'center' },
+        10: { halign: 'right' },
+        11: { halign: 'right', fontStyle: 'bold' },
       },
       didParseCell(hook) {
         if (hook.row.index === tableRows.length - 1) {
           hook.cell.styles.fillColor = [210, 245, 240];
           hook.cell.styles.fontStyle = 'bold';
-          hook.cell.styles.fontSize  = 9;
+          hook.cell.styles.fontSize  = 8.5;
         }
       },
     });

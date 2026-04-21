@@ -55,12 +55,7 @@
     <div class="sidebar-footer">
       <input class="company-name-input" id="companyNameInput" type="text"
              placeholder="Company name for PDFs" title="Company name used in PDF headers">
-      <div class="tiffin-rate-row">
-        <label class="tiffin-rate-label" for="tiffinRateInput"><i class="fas fa-utensils"></i> Tiffin Rate (BDT)</label>
-        <input class="tiffin-rate-input" id="tiffinRateInput" type="number" min="0" step="1" value="50"
-               title="Tiffin/Night allowance amount per day when Out Time > 19:00">
-      </div>
-      <div class="version">TRACS APPAREL v3.0</div>
+      <div class="version">TRACS APPAREL v2.0</div>
     </div>
   </aside>
 
@@ -205,18 +200,9 @@
               <input type="number" id="se-basic" readonly placeholder="Auto-filled">
             </div>
             <div class="form-group">
-              <label>OT Hours <small class="auto-tag">auto</small></label>
-              <input type="number" id="se-ot-hours" min="0" step="0.01" value="0"
+              <label>OT Hours</label>
+              <input type="number" id="se-ot-hours" min="0" step="0.5" value="0"
                      oninput="app.calcPreview()">
-            </div>
-            <div class="form-group">
-              <label>Tiffin Bills (BDT) <small class="auto-tag">auto</small></label>
-              <input type="number" id="se-tiffin-bills" min="0" step="0.01" value="0"
-                     oninput="app.calcPreview()">
-            </div>
-            <div class="form-group">
-              <label>Penalty Absents <small class="auto-tag">auto</small></label>
-              <input type="number" id="se-penalty-absents" min="0" step="1" value="0" readonly>
             </div>
             <div class="form-group">
               <label>Regular Bonus</label>
@@ -231,16 +217,9 @@
               <input type="number" id="se-deductions" min="0" value="0" oninput="app.calcPreview()">
             </div>
             <div class="form-group">
-              <label>Advance (deduct from loan)</label>
+              <label>Advance</label>
               <input type="number" id="se-advance" min="0" value="0" oninput="app.calcPreview()">
             </div>
-          </div>
-
-          <!-- Loan Balance info -->
-          <div class="loan-info-row">
-            <i class="fas fa-hand-holding-usd"></i>
-            <span>Employee Loan Balance: <strong id="se-loan-balance">৳0</strong></span>
-            <small style="color:var(--text-muted);margin-left:8px">(Advance will be subtracted on save)</small>
           </div>
 
           <!-- Attendance row -->
@@ -248,7 +227,7 @@
           <div class="attendance-row">
             <div class="att-info">
               <i class="fas fa-calendar-check"></i>
-              <span>Effective Absent Days (incl. late penalty): <strong id="att-absent-count">0</strong></span>
+              <span>Absent Days: <strong id="att-absent-count">0</strong></span>
               <span class="att-month-days" id="att-month-days"></span>
             </div>
             <button type="button" class="btn btn-secondary" id="markAttBtn"
@@ -273,9 +252,6 @@
               <div class="preview-item">
                 <span>Festival Bonus</span><span id="prev-festival-bonus">&#2547;0</span>
               </div>
-              <div class="preview-item">
-                <span>Tiffin / Night Allowance</span><span id="prev-tiffin-bills">&#2547;0</span>
-              </div>
               <div class="preview-item deduction">
                 <span>Absent Deduction</span><span id="prev-absent-ded">&#2547;0</span>
               </div>
@@ -290,10 +266,8 @@
               </div>
             </div>
             <p class="formula-note">
-              Formula: Basic + (OT Hrs &times; Basic &times; 0.5/100) + Bonuses + Tiffin Bills
-              &minus; (Basic / Days &times; Effective Absent Days) &minus; Deductions &minus; Advance<br>
-              <em>Paid leaves: Sick Leave (SL), Casual Leave (CL), Company Holiday (H) — no deduction.<br>
-              Late penalty: every 3 late days = 1 absent day deduction.</em>
+              Formula: Basic + (OT Hrs &times; Basic &times; 0.5/100) + Regular Bonus + Festival Bonus
+              &minus; (Basic / Days in Month &times; Absent Days) &minus; Other Deductions &minus; Advance
             </p>
           </div>
 
@@ -323,22 +297,18 @@
           <span class="att-sum-item att-sum-p"><i class="fas fa-check-circle"></i> Present: <strong id="att-man-p">0</strong></span>
           <span class="att-sum-item att-sum-a"><i class="fas fa-times-circle"></i> Absent: <strong id="att-man-a">0</strong></span>
           <span class="att-sum-item att-sum-h"><i class="fas fa-star"></i> Holiday: <strong id="att-man-h">0</strong></span>
-          <span class="att-sum-item att-sum-l"><i class="fas fa-clock"></i> Late: <strong id="att-man-l">0</strong></span>
         </div>
         <div class="table-responsive">
-          <table class="data-table att-mgmt-table">
+          <table class="data-table">
             <thead>
               <tr>
                 <th>Employee</th>
                 <th>ID</th>
                 <th>Status</th>
-                <th>In / Out Time &nbsp;<small>(shift 08:00–17:00, grace 5 min)</small></th>
-                <th>OT Hrs</th>
-                <th>Tiffin Bill</th>
               </tr>
             </thead>
             <tbody id="attendance-list-tbody">
-              <tr><td colspan="6" class="empty-state">No employees found</td></tr>
+              <tr><td colspan="3" class="empty-state">No employees found</td></tr>
             </tbody>
           </table>
         </div>
@@ -520,10 +490,6 @@
             <label>Department</label>
             <input type="text" id="emp-department" placeholder="e.g. Sewing, Cutting, Finishing">
           </div>
-          <div class="form-group" style="margin-bottom:14px">
-            <label>Advance Loan Balance (BDT)</label>
-            <input type="number" id="emp-loan-balance" placeholder="0" min="0" value="0">
-          </div>
           <input type="hidden" id="emp-edit-id">
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">
@@ -573,10 +539,7 @@
           <span class="att-badge att-p-badge">P = Present</span>
           <span class="att-badge att-a-badge">A = Absent</span>
           <span class="att-badge att-h-badge">H = Holiday (Paid)</span>
-          <span class="att-badge att-l-badge">L = Late (tracked)</span>
-          <span class="att-badge att-sl-badge">SL = Sick Leave (Paid)</span>
-          <span class="att-badge att-cl-badge">CL = Casual Leave (Paid)</span>
-          <small>Click a day cell to cycle its status &nbsp;|&nbsp; Late penalty: 3 lates = 1 absent deduction</small>
+          <small>Click a day cell to cycle its status</small>
         </div>
         <div class="att-weekdays">
           <span>Sun</span><span>Mon</span><span>Tue</span>
@@ -587,9 +550,6 @@
           <span class="att-sum-item att-sum-p"><i class="fas fa-check-circle"></i> Present: <strong id="att-sum-p">0</strong></span>
           <span class="att-sum-item att-sum-a"><i class="fas fa-times-circle"></i> Absent: <strong id="att-sum-a">0</strong></span>
           <span class="att-sum-item att-sum-h"><i class="fas fa-star"></i> Holiday: <strong id="att-sum-h">0</strong></span>
-          <span class="att-sum-item att-sum-l"><i class="fas fa-clock"></i> Late: <strong id="att-sum-l">0</strong></span>
-          <span class="att-sum-item att-sum-sl"><i class="fas fa-procedures"></i> Sick Leave: <strong id="att-sum-sl">0</strong></span>
-          <span class="att-sum-item att-sum-cl"><i class="fas fa-umbrella-beach"></i> Casual Leave: <strong id="att-sum-cl">0</strong></span>
         </div>
         <div class="form-actions">
           <button class="btn btn-primary" onclick="app.saveAttendance()">

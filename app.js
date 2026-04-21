@@ -2,7 +2,6 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import { getAnalytics } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js';
 import { getDatabase, ref, set, push, get, child } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 
 // ─── Firebase ─────────────────────────────────────────────────────────────────
 
@@ -18,17 +17,15 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const database = getDatabase(firebaseApp);
-const auth = getAuth(firebaseApp);
 try { getAnalytics(firebaseApp); } catch (e) { console.warn('Analytics initialization failed:', e); }
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
 const MS_PER_DAY = 86400000;
 const OT_RATE_FACTOR = 0.5 / 100;
-const DATA_ROOT = 'tracsApparelData';
-const ROLE_ROOT = 'tracsRoles';
+const DATA_PATH = 'tracsApparelData/shared';
+const STATIC_PASSWORD = 'tracsadmin';
 
-let currentUserId = null;
 let dataCache = defaultData();
 
 function defaultData() {
@@ -50,24 +47,19 @@ function normalizeData(raw) {
   };
 }
 
-function getUserDataPath(uid) {
-  return `${DATA_ROOT}/${uid}`;
-}
-
 function getNextSalaryRecordId() {
-  if (!currentUserId) return uid();
-  return push(ref(database, `${getUserDataPath(currentUserId)}/salaryRecords`)).key || uid();
+  return push(ref(database, `${DATA_PATH}/salaryRecords`)).key || uid();
 }
 
-async function loadUserDataFromCloud(uid) {
+async function loadDataFromCloud() {
   const rootRef = ref(database);
-  const snap = await get(child(rootRef, getUserDataPath(uid)));
+  const snap = await get(child(rootRef, DATA_PATH));
   if (snap.exists()) {
     dataCache = normalizeData(snap.val());
     return;
   }
   dataCache = defaultData();
-  await set(ref(database, getUserDataPath(uid)), dataCache);
+  await set(ref(database, DATA_PATH), dataCache);
 }
 
 function loadData() {
@@ -76,9 +68,8 @@ function loadData() {
 
 async function saveData(data) {
   dataCache = normalizeData(data);
-  if (!currentUserId) return false;
   try {
-    await set(ref(database, getUserDataPath(currentUserId)), dataCache);
+    await set(ref(database, DATA_PATH), dataCache);
     return true;
   } catch (e) {
     console.error('Failed to save data to Firebase Realtime Database:', e);
@@ -230,10 +221,6 @@ const app = {
   _attEmpId:        null,
   _attMonth:        null,
   _attMgmtDate:     null,
-  _pendingRole:     null,
-  _currentUserRole: null,
-  _currentUserEmail: '',
-  _authBootstrapped: false,
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
 
@@ -290,51 +277,25 @@ const app = {
     this._setAppAccess(false);
     this._showLogin(true);
 
-    onAuthStateChanged(auth, async user => {
-      if (!user) {
-        currentUserId = null;
-        dataCache = defaultData();
-        this._currentUserRole = null;
-        this._currentUserEmail = '';
-        this._applyAuthHeader();
-        this._setAppAccess(false);
-        this._showLogin(true);
-        return;
-      }
+    // Restore session if previously logged in
+    if (sessionStorage.getItem('tracsLoggedIn') === '1') {
+      await this._bootstrapSession();
+    }
+  },
 
-      try {
-        const role = await this._resolveUserRole(user, this._pendingRole);
-        if (!role) {
-          await signOut(auth);
-          showToast('No role assigned for this account.', 'error');
-          return;
-        }
-        if (this._pendingRole && role !== this._pendingRole) {
-          const expected = this._pendingRole;
-          this._pendingRole = null;
-          await signOut(auth);
-          showToast(`This account is assigned ${role.toUpperCase()}. Please select ${role.toUpperCase()} to sign in.`, 'error');
-          return;
-        }
-
-        this._pendingRole = null;
-        currentUserId = user.uid;
-        this._currentUserRole = role;
-        this._currentUserEmail = user.email || '';
-        await loadUserDataFromCloud(user.uid);
-        this._syncCompanyNameInput();
-        this._applyAuthHeader();
-        this._showLogin(false);
-        this._setAppAccess(true);
-        this.navigateTo('dashboard');
-        if (!this._authBootstrapped) showToast('Signed in successfully.');
-        this._authBootstrapped = true;
-      } catch (err) {
-        console.error('Authentication bootstrap failed:', err);
-        await signOut(auth);
-        showToast('Authentication failed. Please sign in again.', 'error');
-      }
-    });
+  async _bootstrapSession() {
+    try {
+      await loadDataFromCloud();
+      this._syncCompanyNameInput();
+      this._applyAuthHeader(true);
+      this._showLogin(false);
+      this._setAppAccess(true);
+      this.navigateTo('dashboard');
+    } catch (err) {
+      console.error('Session bootstrap failed:', err);
+      sessionStorage.removeItem('tracsLoggedIn');
+      showToast('Failed to load data. Please sign in again.', 'error');
+    }
   },
 
   _syncCompanyNameInput() {
@@ -360,61 +321,63 @@ const app = {
     if (overlay && !isAllowed) overlay.classList.remove('show');
   },
 
-  _applyAuthHeader() {
+  _applyAuthHeader(isLoggedIn) {
     const badge = document.getElementById('authUserBadge');
     const logoutBtn = document.getElementById('logoutBtn');
     if (!badge || !logoutBtn) return;
-    if (!this._currentUserRole || !this._currentUserEmail) {
+    if (!isLoggedIn) {
       badge.style.display = 'none';
       logoutBtn.style.display = 'none';
       return;
     }
-    badge.textContent = `${this._currentUserRole.toUpperCase()} • ${this._currentUserEmail}`;
+    badge.textContent = 'ADMIN';
     badge.style.display = 'inline-flex';
     logoutBtn.style.display = 'inline-flex';
   },
 
-  async _resolveUserRole(user, selectedRole) {
-    const rootRef = ref(database);
-    const rolePath = `${ROLE_ROOT}/${user.uid}/role`;
-    const roleSnap = await get(child(rootRef, rolePath));
-    if (roleSnap.exists()) return String(roleSnap.val() || '').toLowerCase();
-    if (!selectedRole) return null;
-    await set(ref(database, `${ROLE_ROOT}/${user.uid}`), {
-      role: selectedRole,
-      email: user.email || '',
-      updatedAt: Date.now(),
-    });
-    return selectedRole;
+  toggleLoginPassword() {
+    const input = document.getElementById('loginPassword');
+    const icon  = document.getElementById('loginEyeIcon');
+    if (!input || !icon) return;
+    const isHidden = input.type === 'password';
+    input.type = isHidden ? 'text' : 'password';
+    icon.className = isHidden ? 'fas fa-eye-slash' : 'fas fa-eye';
   },
 
   async login(evt) {
     evt.preventDefault();
-    const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
-    const role = document.getElementById('loginRole').value;
-    if (!email || !password || !role) {
-      showToast('Enter email, password and role.', 'error');
+    const errorEl  = document.getElementById('loginError');
+    if (password !== STATIC_PASSWORD) {
+      if (errorEl) errorEl.style.display = 'flex';
       return;
     }
-    this._pendingRole = role.toLowerCase();
+    if (errorEl) errorEl.style.display = 'none';
+    sessionStorage.setItem('tracsLoggedIn', '1');
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await loadDataFromCloud();
+      this._syncCompanyNameInput();
+      this._applyAuthHeader(true);
+      this._showLogin(false);
+      this._setAppAccess(true);
+      this.navigateTo('dashboard');
+      showToast('Signed in successfully.');
     } catch (err) {
-      this._pendingRole = null;
-      console.error('Sign in failed:', err);
-      showToast('Invalid login credentials.', 'error');
+      console.error('Login bootstrap failed:', err);
+      sessionStorage.removeItem('tracsLoggedIn');
+      showToast('Failed to load data. Please try again.', 'error');
     }
   },
 
-  async logout() {
-    try {
-      await signOut(auth);
-      showToast('Logged out.', 'info');
-    } catch (err) {
-      console.error('Logout failed:', err);
-      showToast('Logout failed. Please try again.', 'error');
-    }
+  logout() {
+    sessionStorage.removeItem('tracsLoggedIn');
+    dataCache = defaultData();
+    this._applyAuthHeader(false);
+    this._setAppAccess(false);
+    this._showLogin(true);
+    const pwInput = document.getElementById('loginPassword');
+    if (pwInput) pwInput.value = '';
+    showToast('Logged out.', 'info');
   },
 
   navigateTo(view) {

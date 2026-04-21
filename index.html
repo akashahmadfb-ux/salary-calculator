@@ -3,137 +3,143 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TRACS APPAREL Management Web App</title>
+  <title>TRACS APPAREL — Management</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
         crossorigin="anonymous" referrerpolicy="no-referrer">
 </head>
 <body>
 
-  <!-- Mobile sidebar toggle button -->
-  <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle menu">
-    <i class="fas fa-bars"></i>
-  </button>
+<!-- ─── Loading Overlay ───────────────────────────────────────────────────────── -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner"><i class="fas fa-circle-notch fa-spin"></i><span>Loading…</span></div>
+</div>
 
-  <!-- Mobile overlay -->
+<!-- ─── Login Screen ──────────────────────────────────────────────────────────── -->
+<div class="login-screen" id="loginScreen" style="display:none">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon"><i class="fas fa-tshirt"></i></div>
+      <h1>TRACS APPAREL</h1>
+      <p>HR Management System</p>
+    </div>
+    <form id="loginForm" onsubmit="authModule.handleLogin(event)">
+      <div class="form-group">
+        <label><i class="fas fa-envelope"></i> Email</label>
+        <input type="email" id="login-email" required placeholder="Enter your email">
+      </div>
+      <div class="form-group">
+        <label><i class="fas fa-lock"></i> Password</label>
+        <input type="password" id="login-password" required placeholder="Enter your password">
+      </div>
+      <div class="login-error" id="loginError"></div>
+      <button type="submit" class="btn btn-primary btn-full" id="loginBtn">
+        <i class="fas fa-sign-in-alt"></i> Sign In
+      </button>
+      <div class="login-divider">or</div>
+      <button type="button" class="btn btn-outline btn-full" onclick="authModule.showRegister()">
+        <i class="fas fa-user-plus"></i> Create New Account
+      </button>
+    </form>
+    <form id="registerForm" style="display:none" onsubmit="authModule.handleRegister(event)">
+      <div class="form-group">
+        <label><i class="fas fa-envelope"></i> Email</label>
+        <input type="email" id="reg-email" required placeholder="Your email address">
+      </div>
+      <div class="form-group">
+        <label><i class="fas fa-lock"></i> Password</label>
+        <input type="password" id="reg-password" required placeholder="Min. 6 characters" minlength="6">
+      </div>
+      <div class="form-group">
+        <label><i class="fas fa-lock"></i> Confirm Password</label>
+        <input type="password" id="reg-confirm" required placeholder="Confirm password">
+      </div>
+      <div class="login-error" id="registerError"></div>
+      <button type="submit" class="btn btn-primary btn-full" id="registerBtn">
+        <i class="fas fa-user-plus"></i> Create Account
+      </button>
+      <button type="button" class="btn btn-outline btn-full" onclick="authModule.showLogin()" style="margin-top:8px">
+        <i class="fas fa-arrow-left"></i> Back to Sign In
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ─── Admin App ─────────────────────────────────────────────────────────────── -->
+<div id="adminApp" style="display:none">
+
+  <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle menu"><i class="fas fa-bars"></i></button>
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-  <!-- ─── Sidebar ─────────────────────────────────────────────────────────── -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
-      <div class="brand">
-        <i class="fas fa-tshirt"></i>
-        <span>TRACS APPAREL</span>
-      </div>
+      <div class="brand"><i class="fas fa-tshirt"></i><span>TRACS APPAREL</span></div>
       <div class="brand-sub">Management Web App</div>
     </div>
-
     <nav class="sidebar-nav">
-      <a class="nav-item active" data-view="dashboard" href="#">
-        <i class="fas fa-tachometer-alt"></i><span>Dashboard</span>
-      </a>
-      <a class="nav-item" data-view="employees" href="#">
-        <i class="fas fa-users"></i><span>Employees</span>
-      </a>
-      <a class="nav-item" data-view="salary-entry" href="#">
-        <i class="fas fa-calculator"></i><span>Salary Entry</span>
-      </a>
-      <a class="nav-item" data-view="attendance" href="#">
-        <i class="fas fa-calendar-check"></i><span>Attendance</span>
-      </a>
-      <a class="nav-item" data-view="history" href="#">
-        <i class="fas fa-history"></i><span>History</span>
-      </a>
-      <a class="nav-item" data-view="monthly-summary" href="#">
-        <i class="fas fa-file-alt"></i><span>Monthly Summary</span>
-      </a>
-      <a class="nav-item" data-view="payroll-reports" href="#">
-        <i class="fas fa-filter"></i><span>Payroll Reports</span>
-      </a>
+      <a class="nav-item active" data-view="dashboard" href="#"><i class="fas fa-tachometer-alt"></i><span>Dashboard</span></a>
+      <a class="nav-item" data-view="employees" href="#"><i class="fas fa-users"></i><span>Employees</span></a>
+      <a class="nav-item" data-view="salary-entry" href="#"><i class="fas fa-calculator"></i><span>Salary Entry</span></a>
+      <a class="nav-item" data-view="attendance" href="#"><i class="fas fa-calendar-check"></i><span>Attendance</span></a>
+      <a class="nav-item" data-view="history" href="#"><i class="fas fa-history"></i><span>History</span></a>
+      <a class="nav-item" data-view="monthly-summary" href="#"><i class="fas fa-file-alt"></i><span>Monthly Summary</span></a>
+      <a class="nav-item" data-view="payroll-reports" href="#"><i class="fas fa-filter"></i><span>Payroll Reports</span></a>
+      <a class="nav-item" data-view="settings" href="#"><i class="fas fa-cog"></i><span>Settings</span></a>
     </nav>
-
     <div class="sidebar-footer">
-      <input class="company-name-input" id="companyNameInput" type="text"
-             placeholder="Company name for PDFs" title="Company name used in PDF headers">
-      <div class="version">TRACS APPAREL v2.0</div>
+      <div class="sidebar-user"><i class="fas fa-user-shield"></i><span id="adminUserEmail">Admin</span></div>
+      <button class="btn-logout" onclick="authModule.logout()"><i class="fas fa-sign-out-alt"></i> Sign Out</button>
+      <div class="version">TRACS APPAREL v3.0</div>
     </div>
   </aside>
 
-  <!-- ─── Main Content ─────────────────────────────────────────────────────── -->
   <main class="main-content" id="mainContent">
-
-    <!-- Top header -->
     <header class="top-header">
       <h1 class="page-title" id="pageTitle">Dashboard</h1>
       <span class="current-date" id="currentDate"></span>
     </header>
 
-    <!-- ── Dashboard View ──────────────────────────────────────────────────── -->
+    <!-- ── Dashboard ──────────────────────────────────────────────────────────── -->
     <div class="view active" id="view-dashboard">
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-icon blue"><i class="fas fa-users"></i></div>
-          <div class="stat-info">
-            <h3 id="stat-total-employees">0</h3>
-            <p>Total Employees</p>
-          </div>
+          <div class="stat-info"><h3 id="stat-total-employees">0</h3><p>Total Employees</p></div>
         </div>
         <div class="stat-card">
           <div class="stat-icon green"><i class="fas fa-money-bill-wave"></i></div>
-          <div class="stat-info">
-            <h3 id="stat-this-month-payroll">&#2547;0</h3>
-            <p>This Month Payroll</p>
-          </div>
+          <div class="stat-info"><h3 id="stat-this-month-payroll">&#2547;0</h3><p>This Month Payroll</p></div>
         </div>
         <div class="stat-card">
           <div class="stat-icon orange"><i class="fas fa-clock"></i></div>
-          <div class="stat-info">
-            <h3 id="stat-today-attendance">P: 0 | A: 0</h3>
-            <p>Today's Attendance</p>
-          </div>
+          <div class="stat-info"><h3 id="stat-today-attendance">P: 0 | A: 0</h3><p>Today's Attendance</p></div>
         </div>
         <div class="stat-card">
           <div class="stat-icon purple"><i class="fas fa-file-invoice"></i></div>
-          <div class="stat-info">
-            <h3 id="stat-week-ot">0</h3>
-            <p>This Week's Total OT</p>
-          </div>
+          <div class="stat-info"><h3 id="stat-week-ot">0</h3><p>This Week's Total OT</p></div>
         </div>
       </div>
-
-      <!-- 6-Month Chart -->
       <div class="card chart-card">
         <div class="card-header">
           <h2><i class="fas fa-chart-bar" style="margin-right:6px;color:var(--primary)"></i>6-Month Payroll Overview</h2>
           <span class="chart-subtitle">Total Salary Payout vs Present Workers</span>
         </div>
-        <div class="chart-container">
-          <canvas id="dashboardChart"></canvas>
-        </div>
+        <div class="chart-container"><canvas id="dashboardChart"></canvas></div>
       </div>
-
       <div class="dashboard-bottom">
         <div class="card recent-entries">
           <div class="card-header"><h2>Recent Salary Entries</h2></div>
           <div class="table-responsive">
             <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Employee</th><th>Month</th><th>Basic</th><th>Net Salary</th>
-                </tr>
-              </thead>
-              <tbody id="recent-entries-tbody">
-                <tr><td colspan="4" class="empty-state">No records yet</td></tr>
-              </tbody>
+              <thead><tr><th>Employee</th><th>Month</th><th>Basic</th><th>Net Salary</th></tr></thead>
+              <tbody id="recent-entries-tbody"><tr><td colspan="4" class="empty-state">No records yet</td></tr></tbody>
             </table>
           </div>
         </div>
-
         <div class="card quick-actions">
           <div class="card-header"><h2>Quick Actions</h2></div>
           <div class="quick-actions-grid">
-            <button class="action-btn"
-              onclick="app.navigateTo('employees'); setTimeout(() => document.getElementById('addEmployeeBtn').click(), 120)">
+            <button class="action-btn" onclick="app.navigateTo('employees'); setTimeout(()=>document.getElementById('addEmployeeBtn').click(),120)">
               <i class="fas fa-user-plus"></i><span>Add Employee</span>
             </button>
             <button class="action-btn" onclick="app.navigateTo('salary-entry')">
@@ -150,7 +156,7 @@
       </div>
     </div>
 
-    <!-- ── Employees View ──────────────────────────────────────────────────── -->
+    <!-- ── Employees View ─────────────────────────────────────────────────────── -->
     <div class="view" id="view-employees">
       <div class="view-actions">
         <button class="btn btn-primary" id="addEmployeeBtn" onclick="app.openAddEmployee()">
@@ -162,22 +168,18 @@
           <h2>Employee List</h2>
           <div class="search-box">
             <i class="fas fa-search"></i>
-            <input type="text" id="employeeSearch" placeholder="Search by name or ID…"
-                   oninput="app.filterEmployees()">
+            <input type="text" id="employeeSearch" placeholder="Search by name or ID…" oninput="app.filterEmployees()">
           </div>
         </div>
-        <div class="employee-grid" id="employee-grid">
-          <!-- cards rendered by JS -->
-        </div>
+        <div class="employee-grid" id="employee-grid"></div>
       </div>
     </div>
 
-    <!-- ── Salary Entry View ───────────────────────────────────────────────── -->
+    <!-- ── Salary Entry View ──────────────────────────────────────────────────── -->
     <div class="view" id="view-salary-entry">
       <div class="card">
         <div class="card-header"><h2>Salary Entry</h2></div>
         <form class="salary-form" id="salaryEntryForm" onsubmit="app.saveSalaryEntry(event)">
-
           <div class="form-grid">
             <div class="form-group">
               <label>Employee *</label>
@@ -194,9 +196,12 @@
               <input type="number" id="se-basic" readonly placeholder="Auto-filled">
             </div>
             <div class="form-group">
-              <label>OT Hours</label>
-              <input type="number" id="se-ot-hours" min="0" step="0.5" value="0"
-                     oninput="app.calcPreview()">
+              <label>OT Hours
+                <button type="button" class="btn-auto-ot" onclick="app.autoFillOT()" title="Auto-calculate OT from attendance records">
+                  <i class="fas fa-magic"></i> Auto
+                </button>
+              </label>
+              <input type="number" id="se-ot-hours" min="0" step="0.01" value="0" oninput="app.calcPreview()">
             </div>
             <div class="form-group">
               <label>Regular Bonus</label>
@@ -215,69 +220,46 @@
               <input type="number" id="se-advance" min="0" value="0" oninput="app.calcPreview()">
             </div>
           </div>
-
-          <!-- Attendance row -->
           <input type="hidden" id="se-absent-days" value="0">
           <div class="attendance-row">
             <div class="att-info">
               <i class="fas fa-calendar-check"></i>
               <span>Absent Days: <strong id="att-absent-count">0</strong></span>
               <span class="att-month-days" id="att-month-days"></span>
+              <span class="att-late-badge" id="att-late-badge" style="display:none">
+                <i class="fas fa-clock"></i> Late Days: <strong id="att-late-num">0</strong>
+              </span>
             </div>
-            <button type="button" class="btn btn-secondary" id="markAttBtn"
-                    onclick="app.openAttendanceModal()">
+            <button type="button" class="btn btn-secondary" id="markAttBtn" onclick="app.openAttendanceModal()">
               <i class="fas fa-calendar-alt"></i> Mark Attendance
             </button>
           </div>
-
-          <!-- Live calculation preview -->
           <div class="salary-preview">
             <h3><i class="fas fa-calculator" style="margin-right:6px"></i>Salary Preview</h3>
             <div class="preview-grid">
-              <div class="preview-item">
-                <span>Basic Salary</span><span id="prev-basic">&#2547;0</span>
-              </div>
-              <div class="preview-item">
-                <span>OT Amount</span><span id="prev-ot">&#2547;0</span>
-              </div>
-              <div class="preview-item">
-                <span>Regular Bonus</span><span id="prev-bonus">&#2547;0</span>
-              </div>
-              <div class="preview-item">
-                <span>Festival Bonus</span><span id="prev-festival-bonus">&#2547;0</span>
-              </div>
-              <div class="preview-item deduction">
-                <span>Absent Deduction</span><span id="prev-absent-ded">&#2547;0</span>
-              </div>
-              <div class="preview-item deduction">
-                <span>Other Deductions</span><span id="prev-deductions">&#2547;0</span>
-              </div>
-              <div class="preview-item deduction">
-                <span>Advance</span><span id="prev-advance">&#2547;0</span>
-              </div>
-              <div class="preview-item total">
-                <span>NET TOTAL</span><span id="prev-total">&#2547;0</span>
-              </div>
+              <div class="preview-item"><span>Basic Salary</span><span id="prev-basic">&#2547;0</span></div>
+              <div class="preview-item"><span>OT Amount</span><span id="prev-ot">&#2547;0</span></div>
+              <div class="preview-item"><span>Regular Bonus</span><span id="prev-bonus">&#2547;0</span></div>
+              <div class="preview-item"><span>Festival Bonus</span><span id="prev-festival-bonus">&#2547;0</span></div>
+              <div class="preview-item deduction"><span>Absent Deduction</span><span id="prev-absent-ded">&#2547;0</span></div>
+              <div class="preview-item deduction"><span>Other Deductions</span><span id="prev-deductions">&#2547;0</span></div>
+              <div class="preview-item deduction"><span>Advance</span><span id="prev-advance">&#2547;0</span></div>
+              <div class="preview-item total"><span>NET TOTAL</span><span id="prev-total">&#2547;0</span></div>
             </div>
             <p class="formula-note">
-              Formula: Basic + (OT Hrs &times; Basic &times; 0.5/100) + Regular Bonus + Festival Bonus
-              &minus; (Basic / Days in Month &times; Absent Days) &minus; Other Deductions &minus; Advance
+              Formula: Basic + (OT Hrs &times; Basic &times; OT Rate / 100) + Bonuses
+              &minus; Absent Deduction &minus; Other Deductions &minus; Advance
             </p>
           </div>
-
           <div class="form-actions">
-            <button type="submit" class="btn btn-primary">
-              <i class="fas fa-save"></i> Save Entry
-            </button>
-            <button type="button" class="btn btn-secondary" onclick="app.resetSalaryForm()">
-              <i class="fas fa-times"></i> Reset
-            </button>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Entry</button>
+            <button type="button" class="btn btn-secondary" onclick="app.resetSalaryForm()"><i class="fas fa-times"></i> Reset</button>
           </div>
         </form>
       </div>
     </div>
 
-    <!-- ── Attendance Management View ───────────────────────────────────────── -->
+    <!-- ── Attendance Management View ─────────────────────────────────────────── -->
     <div class="view" id="view-attendance">
       <div class="card">
         <div class="card-header">
@@ -291,109 +273,79 @@
           <span class="att-sum-item att-sum-p"><i class="fas fa-check-circle"></i> Present: <strong id="att-man-p">0</strong></span>
           <span class="att-sum-item att-sum-a"><i class="fas fa-times-circle"></i> Absent: <strong id="att-man-a">0</strong></span>
           <span class="att-sum-item att-sum-h"><i class="fas fa-star"></i> Holiday: <strong id="att-man-h">0</strong></span>
+          <span class="att-sum-item att-sum-l"><i class="fas fa-clock"></i> Late: <strong id="att-man-l">0</strong></span>
         </div>
         <div class="table-responsive">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Employee</th>
-                <th>ID</th>
-                <th>Status</th>
+                <th>Employee</th><th>ID</th>
+                <th>In Time</th><th>Out Time</th>
+                <th>Status</th><th>OT Hrs</th>
               </tr>
             </thead>
             <tbody id="attendance-list-tbody">
-              <tr><td colspan="3" class="empty-state">No employees found</td></tr>
+              <tr><td colspan="6" class="empty-state">No employees found</td></tr>
             </tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- ── History View ────────────────────────────────────────────────────── -->
+    <!-- ── History View ───────────────────────────────────────────────────────── -->
     <div class="view" id="view-history">
       <div class="card">
         <div class="card-header">
           <h2>Salary History</h2>
           <div class="history-filters">
-            <select id="hist-employee" onchange="app.filterHistory()">
-              <option value="">All Employees</option>
-            </select>
-            <select id="hist-month" onchange="app.filterHistory()">
-              <option value="">All Months</option>
-            </select>
+            <select id="hist-employee" onchange="app.filterHistory()"><option value="">All Employees</option></select>
+            <select id="hist-month" onchange="app.filterHistory()"><option value="">All Months</option></select>
           </div>
         </div>
         <div class="table-responsive">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Employee</th>
-                <th>ID</th>
-                <th>Month</th>
-                <th>Basic</th>
-                <th>OT Hrs</th>
-                <th>OT Amt</th>
-                <th>Bonus</th>
-                <th>Fest. Bonus</th>
-                <th>Absent Days</th>
-                <th>Absent Ded.</th>
-                <th>Deductions</th>
-                <th>Advance</th>
-                <th>Net Salary</th>
-                <th>Actions</th>
+                <th>Employee</th><th>ID</th><th>Month</th><th>Basic</th>
+                <th>OT Hrs</th><th>OT Amt</th><th>Bonus</th><th>Fest. Bonus</th>
+                <th>Absent Days</th><th>Absent Ded.</th><th>Deductions</th><th>Advance</th>
+                <th>Net Salary</th><th>Actions</th>
               </tr>
             </thead>
-            <tbody id="history-tbody">
-              <tr><td colspan="14" class="empty-state">No records found</td></tr>
-            </tbody>
+            <tbody id="history-tbody"><tr><td colspan="14" class="empty-state">No records found</td></tr></tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- ── Monthly Summary View ────────────────────────────────────────────── -->
+    <!-- ── Monthly Summary View ───────────────────────────────────────────────── -->
     <div class="view" id="view-monthly-summary">
       <div class="card">
         <div class="card-header">
           <h2>Monthly Summary</h2>
           <div class="summary-actions">
             <input type="month" id="summary-month">
-            <button class="btn btn-primary" onclick="app.loadSummary()">
-              <i class="fas fa-search"></i> Load
-            </button>
-            <button class="btn btn-danger" onclick="app.generateSummaryPDF()">
-              <i class="fas fa-file-pdf"></i> Export PDF
-            </button>
+            <button class="btn btn-primary" onclick="app.loadSummary()"><i class="fas fa-search"></i> Load</button>
+            <button class="btn btn-danger" onclick="app.generateSummaryPDF()"><i class="fas fa-file-pdf"></i> Export PDF</button>
           </div>
         </div>
         <div class="table-responsive">
           <table class="data-table">
             <thead>
               <tr>
-                <th>#</th>
-                <th>Employee Name</th>
-                <th>ID</th>
-                <th>Basic</th>
-                <th>OT Hrs</th>
-                <th>OT Amt</th>
-                <th>Bonus</th>
-                <th>Fest. Bonus</th>
-                <th>Absent Days</th>
-                <th>Total Deduction</th>
-                <th>Net Salary</th>
-                <th>Slip</th>
+                <th>#</th><th>Employee Name</th><th>ID</th><th>Basic</th>
+                <th>OT Hrs</th><th>OT Amt</th><th>Bonus</th><th>Fest. Bonus</th>
+                <th>Absent Days</th><th>Total Deduction</th><th>Net Salary</th><th>Slip</th>
               </tr>
             </thead>
-            <tbody id="summary-tbody">
-              <tr><td colspan="12" class="empty-state">Select a month and click Load</td></tr>
-            </tbody>
+            <tbody id="summary-tbody"><tr><td colspan="12" class="empty-state">Select a month and click Load</td></tr></tbody>
             <tfoot id="summary-tfoot"></tfoot>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- ── Payroll Reports View ─────────────────────────────────────────────── -->
+    <!-- ── Payroll Reports View ───────────────────────────────────────────────── -->
     <div class="view" id="view-payroll-reports">
       <div class="card">
         <div class="card-header">
@@ -406,9 +358,7 @@
             </select>
             <input type="date" id="pr-start-date" aria-label="Report start date">
             <input type="date" id="pr-end-date" aria-label="Report end date">
-            <button class="btn btn-primary" onclick="app.loadPayrollReport()">
-              <i class="fas fa-search"></i> Load
-            </button>
+            <button class="btn btn-primary" onclick="app.loadPayrollReport()"><i class="fas fa-search"></i> Load</button>
           </div>
         </div>
         <div class="payroll-report-summary" id="payroll-report-summary">
@@ -418,192 +368,350 @@
         <div class="table-responsive">
           <table class="data-table">
             <thead>
-              <tr>
-                <th>Employee</th>
-                <th>ID</th>
-                <th>Present</th>
-                <th>Absent</th>
-                <th>Holiday</th>
-                <th>OT Hrs</th>
-                <th>Total Salary</th>
-              </tr>
+              <tr><th>Employee</th><th>ID</th><th>Present</th><th>Absent</th><th>Holiday</th><th>OT Hrs</th><th>Total Salary</th></tr>
             </thead>
-            <tbody id="pr-tbody">
-              <tr><td colspan="7" class="empty-state">Select filters and click Load</td></tr>
-            </tbody>
+            <tbody id="pr-tbody"><tr><td colspan="7" class="empty-state">Select filters and click Load</td></tr></tbody>
             <tfoot id="pr-tfoot"></tfoot>
           </table>
         </div>
       </div>
     </div>
 
-  </main><!-- /main-content -->
+    <!-- ── Settings View ─────────────────────────────────────────────────────── -->
+    <div class="view" id="view-settings">
+      <div class="settings-grid">
 
-  <!-- ─── Add / Edit Employee Modal ─────────────────────────────────────────── -->
-  <div class="modal-overlay" id="employeeModal" role="dialog" aria-modal="true">
-    <div class="modal">
-      <div class="modal-header">
-        <h2 id="employeeModalTitle">Add Employee</h2>
-        <button class="modal-close" onclick="app.closeEmployeeModal()" aria-label="Close">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
-      <div class="modal-body">
-
-        <!-- Photo upload -->
-        <div class="photo-upload-area">
-          <div class="photo-preview" id="photoPreview">
-            <i class="fas fa-user"></i>
+        <div class="card">
+          <div class="card-header">
+            <h2><i class="fas fa-sliders-h" style="margin-right:6px;color:var(--primary)"></i>Shift &amp; OT Settings</h2>
           </div>
-          <div class="photo-upload-controls">
-            <label for="photoInput" class="btn btn-secondary" style="cursor:pointer">
-              <i class="fas fa-camera"></i> Upload Photo
-            </label>
-            <input type="file" id="photoInput" accept="image/*" style="display:none"
-                   onchange="app.handlePhotoUpload(event)">
-            <button type="button" class="btn btn-outline" onclick="app.removePhoto()">
-              <i class="fas fa-trash"></i> Remove
-            </button>
+          <div class="card-body">
+            <form onsubmit="app.saveSettings(event)" id="settingsForm">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Company Name</label>
+                  <input type="text" id="setting-company-name" placeholder="TRACS APPAREL">
+                </div>
+                <div class="form-group">
+                  <label>Shift Start Time</label>
+                  <input type="time" id="setting-shift-start" value="08:00">
+                </div>
+                <div class="form-group">
+                  <label>Shift End Time</label>
+                  <input type="time" id="setting-shift-end" value="17:00">
+                </div>
+                <div class="form-group">
+                  <label>Late Mark After (e.g. 08:05)</label>
+                  <input type="time" id="setting-late-mark" value="08:05">
+                  <small class="form-hint">Workers arriving after this time are marked Late.</small>
+                </div>
+                <div class="form-group">
+                  <label>OT Deduction Threshold (e.g. 09:00)</label>
+                  <input type="time" id="setting-late-threshold" value="09:00">
+                  <small class="form-hint">If arrival is after this, delay from Shift Start is deducted from OT.</small>
+                </div>
+                <div class="form-group">
+                  <label>OT Rate Factor (e.g. 0.5)</label>
+                  <input type="number" id="setting-ot-rate" step="0.01" min="0" value="0.5">
+                  <small class="form-hint">OT Amount = OT Hours &times; Basic &times; (Rate / 100)</small>
+                </div>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Settings</button>
+              </div>
+            </form>
           </div>
         </div>
 
-        <form id="employeeForm" onsubmit="app.saveEmployee(event)">
-          <div class="form-group" style="margin-bottom:14px">
-            <label>Employee Name *</label>
-            <input type="text" id="emp-name" placeholder="Full name" required>
+        <div class="card">
+          <div class="card-header">
+            <h2><i class="fas fa-users-cog" style="margin-right:6px;color:var(--primary)"></i>User Management</h2>
           </div>
-          <div class="form-group" style="margin-bottom:14px">
-            <label>Employee ID *</label>
-            <input type="text" id="emp-id" placeholder="e.g. EMP001" required>
+          <div class="card-body">
+            <p class="settings-hint">
+              Workers can self-register. Link each worker account to an employee by setting their Employee ID below.
+              The first registered user automatically becomes Admin.
+            </p>
+            <div class="table-responsive" style="margin-top:12px">
+              <table class="data-table">
+                <thead><tr><th>Email</th><th>Role</th><th>Linked Employee</th><th>Actions</th></tr></thead>
+                <tbody id="users-tbody"><tr><td colspan="4" class="empty-state">Loading users…</td></tr></tbody>
+              </table>
+            </div>
+            <p class="admin-uid-info" style="margin-top:10px">
+              Signed in as: <strong id="settings-admin-email">—</strong>
+            </p>
           </div>
-          <div class="form-group" style="margin-bottom:14px">
-            <label>Basic Salary (BDT) *</label>
-            <input type="number" id="emp-basic" placeholder="Monthly basic salary" min="0" required>
-          </div>
-          <div class="form-group" style="margin-bottom:14px">
-            <label>Department</label>
-            <input type="text" id="emp-department" placeholder="e.g. Sewing, Cutting, Finishing">
-          </div>
-          <input type="hidden" id="emp-edit-id">
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary">
-              <i class="fas fa-save"></i> Save Employee
-            </button>
-            <button type="button" class="btn btn-secondary" onclick="app.closeEmployeeModal()">
-              Cancel
-            </button>
-          </div>
-        </form>
+        </div>
+
       </div>
     </div>
-  </div>
 
-  <!-- ─── Confirm Modal ─────────────────────────────────────────────────────── -->
-  <div class="modal-overlay" id="confirmModal" role="dialog" aria-modal="true">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2>Confirm Action</h2>
-        <button class="modal-close" onclick="app.closeConfirmModal()" aria-label="Close">
-          <i class="fas fa-times"></i>
-        </button>
+  </main>
+</div><!-- /#adminApp -->
+
+<!-- ─── Worker App ─────────────────────────────────────────────────────────────── -->
+<div id="workerApp" style="display:none">
+  <header class="worker-header">
+    <div class="worker-brand"><i class="fas fa-tshirt"></i> TRACS APPAREL</div>
+    <div class="worker-header-right">
+      <span id="workerUserEmail"></span>
+      <button class="btn-logout" onclick="authModule.logout()"><i class="fas fa-sign-out-alt"></i> Sign Out</button>
+    </div>
+  </header>
+
+  <main class="worker-main">
+
+    <!-- Profile Card -->
+    <div class="card worker-profile-card" id="workerProfileCard">
+      <div class="worker-no-profile" id="workerNoProfile">
+        <i class="fas fa-user-slash"></i>
+        <p>No employee profile linked to your account.</p>
+        <small>Please contact your administrator to link your account.</small>
       </div>
-      <div class="modal-body">
-        <p id="confirmMessage" style="margin-bottom:16px;line-height:1.5">Are you sure?</p>
-        <div class="form-actions">
-          <button class="btn btn-danger" id="confirmBtn">
-            <i class="fas fa-trash"></i> Delete
+      <div id="workerProfileContent" style="display:none">
+        <div class="worker-profile-inner">
+          <div class="worker-avatar" id="workerAvatar"><i class="fas fa-user"></i></div>
+          <div class="worker-info">
+            <h2 id="workerName">—</h2>
+            <p><i class="fas fa-id-badge"></i> <span id="workerEmpId">—</span></p>
+            <p id="workerDeptRow" style="display:none"><i class="fas fa-building"></i> <span id="workerDept">—</span></p>
+            <p class="worker-salary"><i class="fas fa-money-bill"></i> Basic: <strong id="workerBasic">—</strong></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Clock In / Out Card -->
+    <div class="card clock-card" id="workerClockCard" style="display:none">
+      <div class="card-header">
+        <h2><i class="fas fa-clock" style="margin-right:6px;color:var(--primary)"></i>Today's Attendance</h2>
+      </div>
+      <div class="clock-body">
+        <div class="clock-date-time">
+          <div class="clock-date" id="clockDate"></div>
+          <div class="clock-time-live" id="clockTimeLive"></div>
+        </div>
+        <div class="clock-status-row">
+          <div class="clock-entry">
+            <label>In Time</label>
+            <div class="clock-value" id="clockInDisplay">—</div>
+          </div>
+          <div class="clock-entry">
+            <label>Out Time</label>
+            <div class="clock-value" id="clockOutDisplay">—</div>
+          </div>
+          <div class="clock-entry">
+            <label>Status</label>
+            <div class="clock-value" id="clockStatusDisplay">—</div>
+          </div>
+          <div class="clock-entry">
+            <label>Today's OT</label>
+            <div class="clock-value" id="clockOTDisplay">—</div>
+          </div>
+        </div>
+        <div class="clock-actions" id="clockActions">
+          <button class="btn btn-success btn-clock" id="btnClockIn" onclick="workerApp.clockIn()">
+            <i class="fas fa-sign-in-alt"></i> Clock In
           </button>
-          <button class="btn btn-secondary" onclick="app.closeConfirmModal()">Cancel</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ─── Attendance Modal ──────────────────────────────────────────────────── -->
-  <div class="modal-overlay" id="attendanceModal" role="dialog" aria-modal="true">
-    <div class="modal modal-lg">
-      <div class="modal-header">
-        <h2 id="attModalTitle">Mark Attendance</h2>
-        <button class="modal-close" onclick="app.closeAttendanceModal()" aria-label="Close">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
-      <div class="modal-body">
-        <div class="att-legend">
-          <span class="att-badge att-p-badge">P = Present</span>
-          <span class="att-badge att-a-badge">A = Absent</span>
-          <span class="att-badge att-h-badge">H = Holiday (Paid)</span>
-          <small>Click a day cell to cycle its status</small>
-        </div>
-        <div class="att-weekdays">
-          <span>Sun</span><span>Mon</span><span>Tue</span>
-          <span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
-        </div>
-        <div class="att-grid" id="attGrid"></div>
-        <div class="att-summary" id="attSummary">
-          <span class="att-sum-item att-sum-p"><i class="fas fa-check-circle"></i> Present: <strong id="att-sum-p">0</strong></span>
-          <span class="att-sum-item att-sum-a"><i class="fas fa-times-circle"></i> Absent: <strong id="att-sum-a">0</strong></span>
-          <span class="att-sum-item att-sum-h"><i class="fas fa-star"></i> Holiday: <strong id="att-sum-h">0</strong></span>
-        </div>
-        <div class="form-actions">
-          <button class="btn btn-primary" onclick="app.saveAttendance()">
-            <i class="fas fa-save"></i> Save Attendance
+          <button class="btn btn-danger btn-clock" id="btnClockOut" onclick="workerApp.clockOut()" style="display:none">
+            <i class="fas fa-sign-out-alt"></i> Clock Out
           </button>
-          <button class="btn btn-secondary" onclick="app.closeAttendanceModal()">Cancel</button>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- ─── Employee History Modal ────────────────────────────────────────────── -->
-  <div class="modal-overlay" id="empHistoryModal" role="dialog" aria-modal="true">
-    <div class="modal modal-xl">
-      <div class="modal-header">
-        <h2 id="empHistoryTitle">Employee Salary History</h2>
-        <button class="modal-close" onclick="app.closeEmpHistoryModal()" aria-label="Close">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
-      <div class="modal-body">
-        <div class="table-responsive">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Month</th>
-                <th>Basic</th>
-                <th>OT Hrs</th>
-                <th>OT Amt</th>
-                <th>Bonus</th>
-                <th>Fest. Bonus</th>
-                <th>Absent Days</th>
-                <th>Total Deduction</th>
-                <th>Net Salary</th>
-                <th>Slip</th>
-              </tr>
-            </thead>
-            <tbody id="emp-history-tbody">
-              <tr><td colspan="10" class="empty-state">No records</td></tr>
-            </tbody>
-          </table>
+    <!-- Monthly Breakdown Card -->
+    <div class="card worker-breakdown-card" id="workerBreakdownCard" style="display:none">
+      <div class="card-header">
+        <h2><i class="fas fa-chart-line" style="margin-right:6px;color:var(--primary)"></i>Monthly Report</h2>
+        <div class="breakdown-actions">
+          <input type="month" id="breakdown-month">
+          <button class="btn btn-primary" onclick="workerApp.loadBreakdown()"><i class="fas fa-search"></i> Load</button>
+          <button class="btn btn-secondary" onclick="workerApp.printMonthlySheet()"><i class="fas fa-print"></i> Print Sheet</button>
         </div>
+      </div>
+      <div class="breakdown-stats" id="breakdownStats" style="display:none">
+        <div class="bstat"><i class="fas fa-check-circle"></i><span id="bstat-present">0</span><small>Present</small></div>
+        <div class="bstat bstat-late"><i class="fas fa-clock"></i><span id="bstat-late">0</span><small>Late Days</small></div>
+        <div class="bstat bstat-absent"><i class="fas fa-times-circle"></i><span id="bstat-absent">0</span><small>Absent</small></div>
+        <div class="bstat bstat-ot"><i class="fas fa-hourglass-half"></i><span id="bstat-ot">0</span><small>Total OT Hrs</small></div>
+        <div class="bstat bstat-salary"><i class="fas fa-money-bill-wave"></i><span id="bstat-salary">—</span><small>Net Salary</small></div>
+      </div>
+      <div class="table-responsive" id="breakdownTableWrap" style="display:none">
+        <table class="data-table" id="breakdownTable">
+          <thead>
+            <tr><th>Date</th><th>Day</th><th>In Time</th><th>Out Time</th><th>Status</th><th>Late?</th><th>OT Hrs</th></tr>
+          </thead>
+          <tbody id="breakdown-tbody"></tbody>
+        </table>
+      </div>
+      <div id="breakdownEmpty" class="empty-state" style="padding:20px;display:none">No attendance data for this month.</div>
+    </div>
+
+  </main>
+</div><!-- /#workerApp -->
+
+<!-- ─── Add / Edit Employee Modal ─────────────────────────────────────────────── -->
+<div class="modal-overlay" id="employeeModal" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="employeeModalTitle">Add Employee</h2>
+      <button class="modal-close" onclick="app.closeEmployeeModal()" aria-label="Close"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="photo-upload-area">
+        <div class="photo-preview" id="photoPreview"><i class="fas fa-user"></i></div>
+        <div class="photo-upload-controls">
+          <label for="photoInput" class="btn btn-secondary" style="cursor:pointer"><i class="fas fa-camera"></i> Upload Photo</label>
+          <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="app.handlePhotoUpload(event)">
+          <button type="button" class="btn btn-outline" onclick="app.removePhoto()"><i class="fas fa-trash"></i> Remove</button>
+        </div>
+      </div>
+      <form id="employeeForm" onsubmit="app.saveEmployee(event)">
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Employee Name *</label>
+          <input type="text" id="emp-name" placeholder="Full name" required>
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Employee ID *</label>
+          <input type="text" id="emp-id" placeholder="e.g. EMP001" required>
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Basic Salary (BDT) *</label>
+          <input type="number" id="emp-basic" placeholder="Monthly basic salary" min="0" required>
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Department</label>
+          <input type="text" id="emp-department" placeholder="e.g. Sewing, Cutting, Finishing">
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Linked Auth Email (optional)</label>
+          <input type="email" id="emp-email" placeholder="Worker login email">
+          <small class="form-hint">Set this so the worker's login account links to this employee profile.</small>
+        </div>
+        <input type="hidden" id="emp-edit-id">
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Employee</button>
+          <button type="button" class="btn btn-secondary" onclick="app.closeEmployeeModal()">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Confirm Modal ─────────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="confirmModal" role="dialog" aria-modal="true">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2>Confirm Action</h2>
+      <button class="modal-close" onclick="app.closeConfirmModal()" aria-label="Close"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <p id="confirmMessage" style="margin-bottom:16px;line-height:1.5">Are you sure?</p>
+      <div class="form-actions">
+        <button class="btn btn-danger" id="confirmBtn"><i class="fas fa-trash"></i> Delete</button>
+        <button class="btn btn-secondary" onclick="app.closeConfirmModal()">Cancel</button>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- ─── Toast ─────────────────────────────────────────────────────────────── -->
-  <div class="toast" id="toast" role="status" aria-live="polite">
-    <i class="toast-icon fas fa-check-circle" id="toastIcon"></i>
-    <span id="toastMessage">Success</span>
+<!-- ─── Attendance Calendar Modal ─────────────────────────────────────────────── -->
+<div class="modal-overlay" id="attendanceModal" role="dialog" aria-modal="true">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h2 id="attModalTitle">Mark Attendance</h2>
+      <button class="modal-close" onclick="app.closeAttendanceModal()" aria-label="Close"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="att-legend">
+        <span class="att-badge att-p-badge">P = Present</span>
+        <span class="att-badge att-a-badge">A = Absent</span>
+        <span class="att-badge att-h-badge">H = Holiday (Paid)</span>
+        <small>Click a day cell to cycle status</small>
+      </div>
+      <div class="att-weekdays">
+        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+      </div>
+      <div class="att-grid" id="attGrid"></div>
+      <div class="att-summary" id="attSummary">
+        <span class="att-sum-item att-sum-p"><i class="fas fa-check-circle"></i> Present: <strong id="att-sum-p">0</strong></span>
+        <span class="att-sum-item att-sum-a"><i class="fas fa-times-circle"></i> Absent: <strong id="att-sum-a">0</strong></span>
+        <span class="att-sum-item att-sum-h"><i class="fas fa-star"></i> Holiday: <strong id="att-sum-h">0</strong></span>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="app.saveAttendance()"><i class="fas fa-save"></i> Save Attendance</button>
+        <button class="btn btn-secondary" onclick="app.closeAttendanceModal()">Cancel</button>
+      </div>
+    </div>
   </div>
+</div>
 
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
-          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <!-- jsPDF + AutoTable (CDN) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
-          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"
-          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="app.js"></script>
+<!-- ─── Employee History Modal ────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="empHistoryModal" role="dialog" aria-modal="true">
+  <div class="modal modal-xl">
+    <div class="modal-header">
+      <h2 id="empHistoryTitle">Employee Salary History</h2>
+      <button class="modal-close" onclick="app.closeEmpHistoryModal()" aria-label="Close"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Month</th><th>Basic</th><th>OT Hrs</th><th>OT Amt</th><th>Bonus</th>
+              <th>Fest. Bonus</th><th>Absent Days</th><th>Total Deduction</th><th>Net Salary</th><th>Slip</th>
+            </tr>
+          </thead>
+          <tbody id="emp-history-tbody"><tr><td colspan="10" class="empty-state">No records</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Link Employee Modal ───────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="linkEmpModal" role="dialog" aria-modal="true">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2>Link Employee to User</h2>
+      <button class="modal-close" onclick="app.closeLinkEmpModal()" aria-label="Close"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom:12px">User: <strong id="linkEmpUserEmail">—</strong></p>
+      <div class="form-group">
+        <label>Employee ID</label>
+        <select id="linkEmpSelect">
+          <option value="">— Select Employee —</option>
+        </select>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="app.saveLinkEmployee()"><i class="fas fa-link"></i> Link</button>
+        <button class="btn btn-secondary" onclick="app.closeLinkEmpModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Toast ──────────────────────────────────────────────────────────────────── -->
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <i class="toast-icon fas fa-check-circle" id="toastIcon"></i>
+  <span id="toastMessage">Success</span>
+</div>
+
+<!-- Firebase SDK (compat) -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<!-- jsPDF + AutoTable -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="app.js"></script>
 </body>
 </html>

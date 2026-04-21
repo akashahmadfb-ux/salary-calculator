@@ -965,3 +965,118 @@ body {
   .att-day-num { font-size: 11px; }
   .att-day-label { font-size: 9px; }
 }
+
+/* ── Login Screen ─────────────────────────────────────────────────────────── */
+.login-screen {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0d7377 0%, #14a085 50%, #32e0c4 100%);
+}
+.login-card {
+  background: #fff; border-radius: 16px; padding: 40px 36px;
+  width: 100%; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,.2);
+}
+.login-logo { text-align: center; margin-bottom: 28px; }
+.login-logo-icon { font-size: 48px; color: #0d7377; margin-bottom: 8px; }
+.login-logo h1 { font-size: 1.6rem; color: #0d7377; margin: 0; }
+.login-logo p { color: #64748b; margin: 4px 0 0; font-size: .9rem; }
+.login-error { color: #e74c3c; font-size: .85rem; margin-bottom: 10px; min-height: 18px; }
+.login-divider { text-align: center; color: #94a3b8; margin: 14px 0; font-size: .85rem; position: relative; }
+.login-divider::before, .login-divider::after { content:''; position:absolute; top:50%; width:42%; height:1px; background:#e2e8f0; }
+.login-divider::before { left:0; } .login-divider::after { right:0; }
+.btn-full { width: 100%; justify-content: center; }
+.btn-outline { background: transparent; border: 2px solid #0d7377; color: #0d7377; }
+.btn-outline:hover { background: #f0fdfc; }
+
+/* ── Loading Overlay ──────────────────────────────────────────────────────── */
+.loading-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center; z-index: 9999;
+}
+.loading-spinner { color: #fff; text-align: center; font-size: 1.1rem; }
+.loading-spinner i { font-size: 2.5rem; display: block; margin-bottom: 10px; }
+
+/* ── Worker App ────────────────────────────────────────────────────────────── */
+.worker-header {
+  background: var(--sidebar-bg, #0d7377); color: #fff;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px; position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,.2);
+}
+.worker-brand { font-size: 1.2rem; font-weight: 700; }
+.worker-brand i { margin-right: 8px; }
+.worker-header-right { display: flex; align-items: center; gap: 14px; font-size: .85rem; opacity: .9; }
+.worker-main { max-width: 800px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 20px; }
+.worker-profile-card { padding: 24px; }
+.worker-profile-inner { display: flex; align-items: center; gap: 20px; }
+.worker-avatar { width: 80px; height: 80px; border-radius: 50%; background: var(--primary, #0d7377); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 1.8rem; overflow: hidden; flex-shrink: 0; }
+.worker-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.worker-avatar span { font-weight: 700; font-size: 1.5rem; }
+.worker-info h2 { margin: 0 0 6px; color: var(--primary, #0d7377); }
+.worker-info p { margin: 3px 0; color: #64748b; font-size: .9rem; }
+.worker-salary { font-size: .95rem !important; color: #333 !important; }
+.worker-no-profile { text-align: center; padding: 24px; color: #64748b; }
+.worker-no-profile i { font-size: 3rem; color: #cbd5e1; margin-bottom: 12px; }
+
+/* ── Clock Card ────────────────────────────────────────────────────────────── */
+.clock-card { padding: 0; overflow: hidden; }
+.clock-body { padding: 20px 24px; }
+.clock-date-time { text-align: center; margin-bottom: 18px; }
+.clock-date { font-size: .9rem; color: #64748b; }
+.clock-time-live { font-size: 2.2rem; font-weight: 700; color: var(--primary, #0d7377); letter-spacing: 2px; }
+.clock-status-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.clock-entry { text-align: center; background: #f0fdfc; border-radius: 10px; padding: 10px 8px; }
+.clock-entry label { display: block; font-size: .75rem; color: #64748b; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; }
+.clock-value { font-size: 1rem; font-weight: 600; color: #1e293b; }
+.clock-actions { display: flex; justify-content: center; gap: 16px; }
+.btn-clock { padding: 12px 36px; font-size: 1rem; border-radius: 8px; font-weight: 600; }
+.btn-success { background: #10b981; color: #fff; border: none; cursor: pointer; }
+.btn-success:hover { background: #059669; }
+.clock-done-msg { color: #10b981; font-weight: 600; font-size: .95rem; }
+
+/* ── Monthly Breakdown ─────────────────────────────────────────────────────── */
+.breakdown-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.breakdown-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; padding: 16px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+.bstat { text-align: center; }
+.bstat i { font-size: 1.2rem; color: #0d7377; display: block; margin-bottom: 4px; }
+.bstat span { font-size: 1.3rem; font-weight: 700; color: #1e293b; display: block; }
+.bstat small { font-size: .75rem; color: #64748b; }
+.bstat-late i { color: #f59e0b; } .bstat-absent i { color: #ef4444; }
+.bstat-ot i { color: #8b5cf6; } .bstat-salary i { color: #10b981; }
+
+/* ── Settings View ─────────────────────────────────────────────────────────── */
+.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 900px) { .settings-grid { grid-template-columns: 1fr; } }
+.card-body { padding: 20px; }
+.form-hint { display: block; color: #94a3b8; font-size: .78rem; margin-top: 4px; }
+.settings-hint { color: #64748b; font-size: .88rem; line-height: 1.5; }
+.admin-uid-info { font-size: .85rem; color: #64748b; margin-top: 12px; }
+.role-badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: .78rem; font-weight: 600; }
+.role-admin { background: #dbeafe; color: #1d4ed8; }
+.role-worker { background: #d1fae5; color: #065f46; }
+
+/* ── Badge styles ──────────────────────────────────────────────────────────── */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: .73rem; font-weight: 600; }
+.badge-late    { background: #fef3c7; color: #92400e; }
+.badge-present { background: #d1fae5; color: #065f46; }
+.badge-absent  { background: #fee2e2; color: #991b1b; }
+.badge-holiday { background: #ede9fe; color: #5b21b6; }
+.text-muted    { color: #94a3b8; }
+
+/* ── Attendance management late column ───────────────────────────────────────*/
+.att-sum-l i { color: var(--warning, #f59e0b); }
+.att-man-summary .att-sum-l { border-color: #fde68a; }
+
+/* ── Auto OT button ────────────────────────────────────────────────────────── */
+.btn-auto-ot { background: var(--primary,#0d7377); color:#fff; border:none; padding:2px 8px; border-radius:6px; font-size:.75rem; cursor:pointer; margin-left:8px; vertical-align: middle; }
+.btn-auto-ot:hover { background: #0a5f63; }
+
+/* ── Late badge in salary form ────────────────────────────────────────────── */
+.att-late-badge { display: inline-flex; align-items: center; gap: 4px; background: #fef3c7; color: #92400e; border-radius: 12px; padding: 2px 10px; font-size: .8rem; margin-left: 10px; }
+
+/* ── Print styles ──────────────────────────────────────────────────────────── */
+@media print {
+  .worker-header, .breakdown-actions, .clock-card, .worker-profile-card { display: none !important; }
+  .worker-breakdown-card { box-shadow: none; }
+}

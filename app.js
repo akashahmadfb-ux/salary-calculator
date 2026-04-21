@@ -1,46 +1,90 @@
 /* app.js — TRACS APPAREL Management Web App */
-'use strict';
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import { getAnalytics } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js';
+import { getDatabase, ref, set, push, get, child } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+
+// ─── Firebase ─────────────────────────────────────────────────────────────────
+
+const firebaseConfig = {
+  apiKey: 'AIzaSyCXDUrJtkuJZ4BvqsYOFg9SIjOysIgkqtk',
+  authDomain: 'tracs-hr-mangment.firebaseapp.com',
+  projectId: 'tracs-hr-mangment',
+  storageBucket: 'tracs-hr-mangment.firebasestorage.app',
+  messagingSenderId: '1094008024729',
+  appId: '1:1094008024729:web:11f1afa99df6272cee9208',
+  measurementId: 'G-6ZD2M74F0P',
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const database = getDatabase(firebaseApp);
+const auth = getAuth(firebaseApp);
+try { getAnalytics(firebaseApp); } catch (e) { console.warn('Analytics initialization failed:', e); }
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY     = 'tracsApparel_v2';
-const STORAGE_KEY_OLD = 'garmentEMS_v1';
-const MS_PER_DAY      = 86400000;
-const OT_RATE_FACTOR  = 0.5 / 100;
+const MS_PER_DAY = 86400000;
+const OT_RATE_FACTOR = 0.5 / 100;
+const DATA_ROOT = 'tracsApparelData';
+const ROLE_ROOT = 'tracsRoles';
+
+let currentUserId = null;
+let dataCache = defaultData();
 
 function defaultData() {
   return { companyName: 'TRACS APPAREL', employees: [], salaryRecords: [], attendance: {} };
 }
 
-function loadData() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const d = JSON.parse(raw);
-      if (!d.attendance) d.attendance = {};
-      return d;
-    }
-    // Migrate from old storage key
-    const oldRaw = localStorage.getItem(STORAGE_KEY_OLD);
-    if (oldRaw) {
-      const old = JSON.parse(oldRaw);
-      const migrated = {
-        companyName:   'TRACS APPAREL',
-        employees:     old.employees     || [],
-        salaryRecords: old.salaryRecords || [],
-        attendance:    {},
-      };
-      saveData(migrated);
-      return migrated;
-    }
-    return defaultData();
-  } catch (e) {
-    return defaultData();
-  }
+function cloneData(data) {
+  return JSON.parse(JSON.stringify(data));
 }
 
-function saveData(data) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+function normalizeData(raw) {
+  const base = defaultData();
+  const safe = raw && typeof raw === 'object' ? raw : {};
+  return {
+    companyName: (typeof safe.companyName === 'string' && safe.companyName.trim()) ? safe.companyName : base.companyName,
+    employees: Array.isArray(safe.employees) ? safe.employees : [],
+    salaryRecords: Array.isArray(safe.salaryRecords) ? safe.salaryRecords : [],
+    attendance: safe.attendance && typeof safe.attendance === 'object' ? safe.attendance : {},
+  };
+}
+
+function getUserDataPath(uid) {
+  return `${DATA_ROOT}/${uid}`;
+}
+
+function getNextSalaryRecordId() {
+  if (!currentUserId) return uid();
+  return push(ref(database, `${getUserDataPath(currentUserId)}/salaryRecords`)).key || uid();
+}
+
+async function loadUserDataFromCloud(uid) {
+  const rootRef = ref(database);
+  const snap = await get(child(rootRef, getUserDataPath(uid)));
+  if (snap.exists()) {
+    dataCache = normalizeData(snap.val());
+    return;
+  }
+  dataCache = defaultData();
+  await set(ref(database, getUserDataPath(uid)), dataCache);
+}
+
+function loadData() {
+  return cloneData(dataCache);
+}
+
+async function saveData(data) {
+  dataCache = normalizeData(data);
+  if (!currentUserId) return false;
+  try {
+    await set(ref(database, getUserDataPath(currentUserId)), dataCache);
+    return true;
+  } catch (e) {
+    console.error('Failed to save data to Firebase Realtime Database:', e);
+    showToast('Cloud save failed. Please try again.', 'error');
+    return false;
+  }
 }
 
 // ─── Salary Calculation ────────────────────────────────────────────────────────
@@ -160,7 +204,7 @@ function showToast(msg, type = 'success') {
   t._timer = setTimeout(() => t.classList.remove('show'), 3200);
 }
 
-// Compress & resize image to ≤200px for localStorage friendliness
+// Compress & resize image to ≤200px for faster cloud sync
 function compressImage(dataUrl, cb) {
   const img = new Image();
   img.onload = () => {
@@ -186,10 +230,14 @@ const app = {
   _attEmpId:        null,
   _attMonth:        null,
   _attMgmtDate:     null,
+  _pendingRole:     null,
+  _currentUserRole: null,
+  _currentUserEmail: '',
+  _authBootstrapped: false,
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
 
-  init() {
+  async init() {
     document.getElementById('currentDate').textContent =
       new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -202,14 +250,14 @@ const app = {
     document.getElementById('att-man-date').value  = today;
     this._attMgmtDate = today;
 
-    // Company name
-    const data = loadData();
-    document.getElementById('companyNameInput').value = data.companyName || 'TRACS APPAREL';
-    document.getElementById('companyNameInput').addEventListener('change', e => {
+    document.getElementById('companyNameInput').addEventListener('change', async e => {
       const d = loadData();
       d.companyName = e.target.value.trim() || 'TRACS APPAREL';
-      saveData(d);
+      await saveData(d);
     });
+
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) loginForm.addEventListener('submit', e => this.login(e));
 
     // Sidebar nav
     document.querySelectorAll('.nav-item').forEach(item => {
@@ -239,7 +287,134 @@ const app = {
       }
     });
 
-    this.navigateTo('dashboard');
+    this._setAppAccess(false);
+    this._showLogin(true);
+
+    onAuthStateChanged(auth, async user => {
+      if (!user) {
+        currentUserId = null;
+        dataCache = defaultData();
+        this._currentUserRole = null;
+        this._currentUserEmail = '';
+        this._applyAuthHeader();
+        this._setAppAccess(false);
+        this._showLogin(true);
+        return;
+      }
+
+      try {
+        const role = await this._resolveUserRole(user, this._pendingRole);
+        if (!role) {
+          await signOut(auth);
+          showToast('No role assigned for this account.', 'error');
+          return;
+        }
+        if (this._pendingRole && role !== this._pendingRole) {
+          const expected = this._pendingRole;
+          this._pendingRole = null;
+          await signOut(auth);
+          showToast(`This account is assigned ${role.toUpperCase()}. Please select ${role.toUpperCase()} to sign in.`, 'error');
+          return;
+        }
+
+        this._pendingRole = null;
+        currentUserId = user.uid;
+        this._currentUserRole = role;
+        this._currentUserEmail = user.email || '';
+        await loadUserDataFromCloud(user.uid);
+        this._syncCompanyNameInput();
+        this._applyAuthHeader();
+        this._showLogin(false);
+        this._setAppAccess(true);
+        this.navigateTo('dashboard');
+        if (!this._authBootstrapped) showToast('Signed in successfully.');
+        this._authBootstrapped = true;
+      } catch (err) {
+        console.error('Authentication bootstrap failed:', err);
+        await signOut(auth);
+        showToast('Authentication failed. Please sign in again.', 'error');
+      }
+    });
+  },
+
+  _syncCompanyNameInput() {
+    const data = loadData();
+    const input = document.getElementById('companyNameInput');
+    if (input) input.value = data.companyName || 'TRACS APPAREL';
+  },
+
+  _showLogin(show) {
+    const modal = document.getElementById('loginModal');
+    if (!modal) return;
+    modal.classList.toggle('show', !!show);
+  },
+
+  _setAppAccess(isAllowed) {
+    const sidebar = document.getElementById('sidebar');
+    const main = document.getElementById('mainContent');
+    const toggle = document.getElementById('sidebarToggle');
+    const overlay = document.getElementById('sidebarOverlay');
+    if (sidebar) sidebar.style.display = isAllowed ? 'flex' : 'none';
+    if (main) main.style.display = isAllowed ? 'flex' : 'none';
+    if (toggle) toggle.style.display = isAllowed ? '' : 'none';
+    if (overlay && !isAllowed) overlay.classList.remove('show');
+  },
+
+  _applyAuthHeader() {
+    const badge = document.getElementById('authUserBadge');
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (!badge || !logoutBtn) return;
+    if (!this._currentUserRole || !this._currentUserEmail) {
+      badge.style.display = 'none';
+      logoutBtn.style.display = 'none';
+      return;
+    }
+    badge.textContent = `${this._currentUserRole.toUpperCase()} • ${this._currentUserEmail}`;
+    badge.style.display = 'inline-flex';
+    logoutBtn.style.display = 'inline-flex';
+  },
+
+  async _resolveUserRole(user, selectedRole) {
+    const rootRef = ref(database);
+    const rolePath = `${ROLE_ROOT}/${user.uid}/role`;
+    const roleSnap = await get(child(rootRef, rolePath));
+    if (roleSnap.exists()) return String(roleSnap.val() || '').toLowerCase();
+    if (!selectedRole) return null;
+    await set(ref(database, `${ROLE_ROOT}/${user.uid}`), {
+      role: selectedRole,
+      email: user.email || '',
+      updatedAt: Date.now(),
+    });
+    return selectedRole;
+  },
+
+  async login(evt) {
+    evt.preventDefault();
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const role = document.getElementById('loginRole').value;
+    if (!email || !password || !role) {
+      showToast('Enter email, password and role.', 'error');
+      return;
+    }
+    this._pendingRole = role.toLowerCase();
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      this._pendingRole = null;
+      console.error('Sign in failed:', err);
+      showToast('Invalid login credentials.', 'error');
+    }
+  },
+
+  async logout() {
+    try {
+      await signOut(auth);
+      showToast('Logged out.', 'info');
+    } catch (err) {
+      console.error('Logout failed:', err);
+      showToast('Logout failed. Please try again.', 'error');
+    }
   },
 
   navigateTo(view) {
@@ -521,7 +696,7 @@ const app = {
     document.getElementById('photoInput').value = '';
   },
 
-  saveEmployee(evt) {
+  async saveEmployee(evt) {
     evt.preventDefault();
     const data   = loadData();
     const name   = document.getElementById('emp-name').value.trim();
@@ -556,7 +731,7 @@ const app = {
       showToast('Employee added!');
     }
 
-    saveData(data);
+    await saveData(data);
     this.closeEmployeeModal();
     this.renderEmployees();
     this.renderAttendanceManagement();
@@ -573,14 +748,14 @@ const app = {
     document.getElementById('confirmModal').classList.add('show');
   },
 
-  deleteEmployee(id) {
+  async deleteEmployee(id) {
     const data = loadData();
     data.employees     = data.employees.filter(e => e.id !== id);
     data.salaryRecords = data.salaryRecords.filter(r => r.employeeId !== id);
     Object.keys(data.attendance || {}).forEach(k => {
       if (k.startsWith(id + '|')) delete data.attendance[k];
     });
-    saveData(data);
+    await saveData(data);
     this.closeConfirmModal();
     this.renderEmployees();
     this.renderAttendanceManagement();
@@ -728,7 +903,7 @@ const app = {
     document.getElementById('prev-total').textContent          = fmt(total);
   },
 
-  saveSalaryEntry(evt) {
+  async saveSalaryEntry(evt) {
     evt.preventDefault();
     const data          = loadData();
     const empId         = document.getElementById('se-employee').value;
@@ -750,7 +925,7 @@ const app = {
     const existIdx = data.salaryRecords.findIndex(r => r.employeeId === empId && r.month === month);
 
     const record = {
-      id:               existIdx !== -1 ? data.salaryRecords[existIdx].id : uid(),
+      id:               existIdx !== -1 ? data.salaryRecords[existIdx].id : getNextSalaryRecordId(),
       employeeId:       empId,
       month,
       basicSalary:      basic,
@@ -774,7 +949,7 @@ const app = {
       showToast('Record saved!');
     }
 
-    saveData(data);
+    await saveData(data);
     this.resetSalaryForm();
     this.renderPayrollReports();
   },
@@ -861,12 +1036,12 @@ const app = {
     document.getElementById('att-sum-h').textContent = h;
   },
 
-  saveAttendance() {
+  async saveAttendance() {
     const data = loadData();
     if (!data.attendance) data.attendance = {};
     const key = `${this._attEmpId}|${this._attMonth}`;
     data.attendance[key] = { ...this._tempAttendance };
-    saveData(data);
+    await saveData(data);
 
     const days = getDaysInMonth(this._attMonth);
     let absent = 0;
@@ -967,11 +1142,11 @@ const app = {
     document.getElementById('att-man-h').textContent = h;
   },
 
-  setAttendanceForDate(empId, status) {
+  async setAttendanceForDate(empId, status) {
     const data = loadData();
     const dateStr = document.getElementById('att-man-date').value;
     setAttendanceStatus(data, empId, dateStr, status);
-    saveData(data);
+    await saveData(data);
     this._attMgmtDate = dateStr;
     this._renderAttendanceManagementRows(data);
     this._syncAbsentDays();
@@ -1169,10 +1344,10 @@ const app = {
     document.getElementById('confirmModal').classList.add('show');
   },
 
-  deleteRecord(id) {
+  async deleteRecord(id) {
     const data = loadData();
     data.salaryRecords = data.salaryRecords.filter(r => r.id !== id);
-    saveData(data);
+    await saveData(data);
     this.closeConfirmModal();
     this.filterHistory();
     showToast('Record deleted!');
@@ -1504,4 +1679,12 @@ function esc(str) {
 
 // ─── Boot ──────────────────────────────────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', () => app.init());
+window.app = app;
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    await app.init();
+  } catch (err) {
+    console.error('App initialization failed:', err);
+    showToast('Failed to initialize app.', 'error');
+  }
+});

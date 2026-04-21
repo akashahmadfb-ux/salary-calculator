@@ -1841,7 +1841,7 @@ const app = {
 
     const totalRow = [
       '', 'TOTAL', '',
-      fmtPDF(totBasic), totOtHrs.toFixed(2), fmtPDF(totOtAmt),
+      fmtPDF(totBasic), fmtPDF(totOtHrs), fmtPDF(totOtAmt),
       fmtPDF(totBonus), fmtPDF(totFest), fmtPDF(totTiffin), totAbsent,
       fmtPDF(totDed),   fmtPDF(totNet),
     ];

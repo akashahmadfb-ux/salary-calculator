@@ -433,15 +433,10 @@ const app = {
       await signInWithEmailAndPassword(auth, email, password);
       // onAuthStateChanged will handle the rest
     } catch (err) {
-      let msg = 'Login failed. Please check your credentials.';
-      if (['auth/user-not-found', 'auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-email'].includes(err.code)) {
-        msg = 'Invalid email or password.';
-      } else if (err.code === 'auth/too-many-requests') {
-        msg = 'Too many failed attempts. Please try again later.';
-      } else if (err.code === 'auth/network-request-failed') {
-        msg = 'Network error. Check your internet connection.';
-      }
+      console.log("Login Error: ", err);
+      const msg = err.message || 'Login failed. Please check your credentials.';
       if (errorEl) { errorEl.textContent = msg; errorEl.style.display = 'flex'; }
+      alert(msg);
     } finally {
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-right-to-bracket"></i> Sign In'; }
     }

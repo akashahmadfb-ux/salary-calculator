@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TRACS APPAREL — Production Tracking</title>
+
+  <!-- Bootstrap 5 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        crossorigin="anonymous">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+        crossorigin="anonymous" referrerpolicy="no-referrer">
+  <!-- jsPDF (UMD) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <!-- jsPDF AutoTable -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+  <style>
+    /* ── CSS Variables (Dark Teal & Light Blue theme) ───────────────────────── */
+    :root {
+      --primary:       #0d7377;
+      --primary-light: #14a085;
+      --primary-dark:  #0a5457;
+      --secondary:     #48cae4;
+      --accent:        #32e0c4;
+      --danger:        #e74c3c;
+      --warning:       #f39c12;
+      --success:       #27ae60;
+      --bg:            #eef8f9;
+      --card-bg:       #ffffff;
+      --sidebar-bg:    #0a2342;
+      --text:          #1e293b;
+      --text-muted:    #64748b;
+      --border:        #cfe8ea;
+      --radius:        10px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Login Screen ───────────────────────────────────────────────────────── */
+    #loginScreen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, var(--sidebar-bg) 0%, var(--primary-dark) 60%, var(--primary) 100%);
+    }
+
+    .login-card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 2.5rem 2rem;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 20px 40px rgba(0,0,0,.3);
+    }
+
+    .login-logo {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .login-logo i {
+      font-size: 3rem;
+      color: var(--accent);
+    }
+
+    .login-logo h2 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--sidebar-bg);
+      margin-top: .5rem;
+    }
+
+    .login-logo p {
+      font-size: .8rem;
+      color: var(--text-muted);
+      letter-spacing: .8px;
+      text-transform: uppercase;
+    }
+
+    .login-card .form-label { font-weight: 600; color: var(--text); }
+
+    .login-card .form-control:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 .2rem rgba(13,115,119,.25);
+    }
+
+    .btn-login {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      border: none;
+      color: #fff;
+      font-weight: 600;
+      letter-spacing: .4px;
+      padding: .65rem;
+      width: 100%;
+      border-radius: var(--radius);
+      transition: opacity .2s;
+    }
+
+    .btn-login:hover { opacity: .9; color: #fff; }
+
+    #loginError {
+      display: none;
+      background: #fef0f0;
+      border: 1px solid #fca5a5;
+      color: var(--danger);
+      border-radius: 8px;
+      padding: .55rem .75rem;
+      font-size: .875rem;
+    }
+
+    /* ── App Shell ──────────────────────────────────────────────────────────── */
+    #appShell { display: none; min-height: 100vh; flex-direction: column; }
+
+    .app-header {
+      background: var(--sidebar-bg);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.5rem;
+      height: 60px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    }
+
+    .app-header .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .app-header .brand i { color: var(--accent); font-size: 1.3rem; }
+
+    .app-header .brand small {
+      font-weight: 400;
+      color: rgba(255,255,255,.55);
+      font-size: .72rem;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      display: block;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+    }
+
+    .user-badge {
+      background: rgba(255,255,255,.12);
+      border-radius: 20px;
+      padding: .3rem .8rem;
+      font-size: .8rem;
+      color: rgba(255,255,255,.85);
+    }
+
+    .user-badge i { color: var(--accent); margin-right: 5px; }
+
+    .btn-logout {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,.35);
+      color: rgba(255,255,255,.85);
+      padding: .3rem .8rem;
+      border-radius: 20px;
+      font-size: .8rem;
+      cursor: pointer;
+      transition: background .2s;
+    }
+
+    .btn-logout:hover { background: rgba(255,255,255,.15); }
+
+    .main-content { flex: 1; padding: 1.5rem; }
+
+    /* ── Cards ──────────────────────────────────────────────────────────────── */
+    .card-panel {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      margin-bottom: 1.5rem;
+    }
+
+    .card-panel-header {
+      background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+      color: #fff;
+      padding: .85rem 1.25rem;
+      border-radius: var(--radius) var(--radius) 0 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-panel-header h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .card-panel-body { padding: 1.25rem; }
+
+    /* ── Form Styles ────────────────────────────────────────────────────────── */
+    .form-label { font-weight: 600; font-size: .875rem; color: var(--text); }
+
+    .form-control, .form-select {
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: .875rem;
+      padding: .5rem .75rem;
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    .form-control:focus, .form-select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 .2rem rgba(13,115,119,.2);
+      outline: none;
+    }
+
+    .btn-primary-teal {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      border: none;
+      color: #fff;
+      font-weight: 600;
+      padding: .5rem 1.25rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: opacity .2s;
+    }
+
+    .btn-primary-teal:hover { opacity: .88; }
+
+    .btn-outline-teal {
+      background: transparent;
+      border: 1.5px solid var(--primary);
+      color: var(--primary);
+      font-weight: 600;
+      padding: .45rem 1.1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background .2s, color .2s;
+      font-size: .875rem;
+    }
+
+    .btn-outline-teal:hover { background: var(--primary); color: #fff; }
+
+    /* ── Table ──────────────────────────────────────────────────────────────── */
+    .prod-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: .82rem;
+    }
+
+    .prod-table thead tr {
+      background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+      color: #fff;
+    }
+
+    .prod-table thead th {
+      padding: .7rem .75rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .prod-table thead th:first-child { border-radius: 8px 0 0 0; }
+    .prod-table thead th:last-child  { border-radius: 0 8px 0 0; }
+
+    .prod-table tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .15s;
+    }
+
+    .prod-table tbody tr:hover { background: #f0fbfc; }
+
+    .prod-table tbody td {
+      padding: .6rem .75rem;
+      vertical-align: middle;
+    }
+
+    /* Delay alert — red row */
+    .prod-table tbody tr.delay-alert {
+      background: #fff5f5 !important;
+      border-left: 3px solid var(--danger);
+    }
+
+    .prod-table tbody tr.delay-alert:hover { background: #ffe8e8 !important; }
+
+    .delay-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--danger);
+      color: #fff;
+      font-size: .7rem;
+      padding: 2px 7px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+
+    /* WIP badge */
+    .wip-badge {
+      display: inline-block;
+      background: #fff3cd;
+      color: #856404;
+      font-size: .75rem;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+
+    /* Stage badges */
+    .stage-chip {
+      display: inline-block;
+      font-size: .72rem;
+      padding: 2px 9px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+
+    .stage-chip.cutting  { background: #dbeafe; color: #1d4ed8; }
+    .stage-chip.sewing   { background: #dcfce7; color: #166534; }
+    .stage-chip.washing  { background: #fae8ff; color: #7e22ce; }
+    .stage-chip.complete { background: #d1fae5; color: #065f46; }
+
+    /* ── Section divider ────────────────────────────────────────────────────── */
+    .section-divider {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      margin: 1rem 0 .75rem;
+      font-size: .78rem;
+      font-weight: 700;
+      color: var(--primary-dark);
+      text-transform: uppercase;
+      letter-spacing: .8px;
+    }
+
+    .section-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── Toast ──────────────────────────────────────────────────────────────── */
+    #toastContainer {
+      position: fixed;
+      bottom: 1.2rem;
+      right: 1.2rem;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: .5rem;
+    }
+
+    .toast-msg {
+      padding: .7rem 1.1rem;
+      border-radius: 8px;
+      color: #fff;
+      font-size: .875rem;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,.2);
+      animation: slideIn .25s ease;
+    }
+
+    .toast-msg.success { background: var(--success); }
+    .toast-msg.error   { background: var(--danger);  }
+    .toast-msg.info    { background: var(--primary);  }
+
+    @keyframes slideIn {
+      from { transform: translateX(60px); opacity: 0; }
+      to   { transform: translateX(0);    opacity: 1; }
+    }
+
+    /* ── Empty state ────────────────────────────────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: var(--text-muted);
+    }
+
+    .empty-state i { font-size: 2.5rem; opacity: .3; margin-bottom: .5rem; display: block; }
+
+    /* ── Spinner ────────────────────────────────────────────────────────────── */
+    .spinner-wrap {
+      display: flex;
+      justify-content: center;
+      padding: 2rem 0;
+    }
+
+    /* ── Responsive ─────────────────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .main-content { padding: .75rem; }
+      .prod-table { font-size: .75rem; }
+      .app-header { padding: 0 .75rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     LOGIN SCREEN
+════════════════════════════════════════════════════════════════════════════ -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">
+      <i class="fas fa-industry"></i>
+      <h2>TRACS APPAREL</h2>
+      <p>Production Tracking Module</p>
+    </div>
+
+    <div id="loginError" class="mb-3">
+      <i class="fas fa-exclamation-circle me-1"></i>
+      <span id="loginErrorMsg">Invalid credentials.</span>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label" for="loginEmail"><i class="fas fa-envelope me-1"></i>Gmail Address</label>
+      <input type="email" class="form-control" id="loginEmail" placeholder="you@gmail.com"
+             autocomplete="email" required>
+    </div>
+
+    <div class="mb-4">
+      <label class="form-label" for="loginPassword"><i class="fas fa-lock me-1"></i>Password</label>
+      <input type="password" class="form-control" id="loginPassword" placeholder="••••••••"
+             autocomplete="current-password" required>
+    </div>
+
+    <button class="btn-login" id="loginBtn" onclick="prodApp.login()">
+      <i class="fas fa-sign-in-alt me-2"></i>Sign In
+    </button>
+
+    <p class="text-center mt-3" style="font-size:.75rem;color:var(--text-muted)">
+      Secured by Firebase Authentication
+    </p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     APP SHELL  (shown after login)
+════════════════════════════════════════════════════════════════════════════ -->
+<div id="appShell" style="display:none; flex-direction:column; min-height:100vh;">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="brand">
+      <i class="fas fa-industry"></i>
+      <div>
+        TRACS APPAREL
+        <small>Production Tracking</small>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="user-badge"><i class="fas fa-user-circle"></i><span id="headerUserEmail"></span></span>
+      <button class="btn-logout" onclick="prodApp.logout()">
+        <i class="fas fa-sign-out-alt me-1"></i>Logout
+      </button>
+    </div>
+  </header>
+
+  <!-- Main content -->
+  <div class="main-content">
+
+    <!-- ── Order Entry Form ─────────────────────────────────────────────────── -->
+    <div class="card-panel">
+      <div class="card-panel-header">
+        <h2><i class="fas fa-plus-circle me-2"></i>Add / Update Production Order</h2>
+      </div>
+      <div class="card-panel-body">
+        <form id="orderForm" onsubmit="prodApp.saveOrder(event)" novalidate>
+          <input type="hidden" id="editOrderId">
+
+          <!-- Basic Order Info -->
+          <div class="section-divider"><i class="fas fa-clipboard-list"></i> Order Details</div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <label class="form-label" for="buyerName">Buyer Name *</label>
+              <input type="text" class="form-control" id="buyerName"
+                     placeholder="e.g. H&M, Zara, Next" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="styleNo">Style / Order No *</label>
+              <input type="text" class="form-control" id="styleNo"
+                     placeholder="e.g. H&M-2024-001" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="totalQty">Total Quantity *</label>
+              <input type="number" class="form-control" id="totalQty"
+                     min="1" placeholder="e.g. 5000" required>
+            </div>
+          </div>
+
+          <!-- Cutting -->
+          <div class="section-divider"><i class="fas fa-cut"></i> Cutting</div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label" for="cuttingDate">Cutting Date</label>
+              <input type="date" class="form-control" id="cuttingDate">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="cuttingQty">Qty Cut</label>
+              <input type="number" class="form-control" id="cuttingQty" min="0" placeholder="0">
+            </div>
+          </div>
+
+          <!-- Sewing -->
+          <div class="section-divider"><i class="fas fa-sewing-circle" style="font-family:sans-serif">✂</i> Sewing (Swing)</div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label" for="sewingDate">Date Moved to Sewing</label>
+              <input type="date" class="form-control" id="sewingDate">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="sewingQty">Qty Sewn</label>
+              <input type="number" class="form-control" id="sewingQty" min="0" placeholder="0">
+            </div>
+          </div>
+
+          <!-- Washing -->
+          <div class="section-divider"><i class="fas fa-tint"></i> Washing</div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label" for="washingDate">Date Moved to Washing</label>
+              <input type="date" class="form-control" id="washingDate">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="washingQty">Qty Received from Wash</label>
+              <input type="number" class="form-control" id="washingQty" min="0" placeholder="0">
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 mt-3">
+            <button type="submit" class="btn-primary-teal">
+              <i class="fas fa-save me-1"></i>Save Order
+            </button>
+            <button type="button" class="btn-outline-teal" onclick="prodApp.cancelEdit()">
+              <i class="fas fa-times me-1"></i>Cancel / Reset
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ── Production Records Table ─────────────────────────────────────────── -->
+    <div class="card-panel">
+      <div class="card-panel-header">
+        <h2><i class="fas fa-table me-2"></i>Production Records (Buyer Wise)</h2>
+        <div class="d-flex gap-2 align-items-center">
+          <input type="text" id="searchInput" class="form-control form-control-sm"
+                 placeholder="Search buyer / style…"
+                 oninput="prodApp.renderTable()"
+                 style="width:180px;background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3);"
+                 aria-label="Search records">
+        </div>
+      </div>
+      <div class="card-panel-body p-0">
+        <div class="table-responsive">
+          <table class="prod-table" id="prodTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Buyer</th>
+                <th>Style / Order No</th>
+                <th>Total Qty</th>
+                <th>Cut Date</th>
+                <th>Cut Qty</th>
+                <th>Sewing Date</th>
+                <th>Sewing Qty</th>
+                <th>WIP<br><small style="font-weight:400;opacity:.8">(Cut − Sewn)</small></th>
+                <th>Wash Date</th>
+                <th>Wash Qty</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="prodTbody">
+              <tr>
+                <td colspan="13">
+                  <div class="spinner-wrap">
+                    <div class="spinner-border text-secondary" role="status">
+                      <span class="visually-hidden">Loading…</span>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main-content -->
+</div><!-- /appShell -->
+
+<!-- Toast container -->
+<div id="toastContainer"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     FIREBASE + APP SCRIPT
+════════════════════════════════════════════════════════════════════════════ -->
+<script type="module">
+  // ── Firebase Config Placeholder ──────────────────────────────────────────
+  // Replace these values with your own Firebase project credentials.
+  const firebaseConfig = {
+    apiKey:            'AIzaSyCXDUrJtkuJZ4BvqsYOFg9SIjOysIgkqtk',
+    authDomain:        'tracs-hr-mangment.firebaseapp.com',
+    projectId:         'tracs-hr-mangment',
+    storageBucket:     'tracs-hr-mangment.firebasestorage.app',
+    messagingSenderId: '1094008024729',
+    appId:             '1:1094008024729:web:11f1afa99df6272cee9208',
+    measurementId:     'G-6ZD2M74F0P',
+    databaseURL:       'https://tracs-hr-mangment-default-rtdb.firebaseio.com',
+  };
+
+  // ── Firebase SDK (ESM) ───────────────────────────────────────────────────
+  import { initializeApp }
+    from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+  import {
+    getAuth,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged,
+  } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+  import {
+    getDatabase,
+    ref,
+    push,
+    set,
+    remove,
+    onValue,
+  } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
+
+  // ── Init ─────────────────────────────────────────────────────────────────
+  const app  = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db   = getDatabase(app);
+
+  const PROD_PATH = 'tracsApparelData/production';
+
+  // ── Local cache ──────────────────────────────────────────────────────────
+  let records = {};   // key → record object
+
+  // ── Utility ──────────────────────────────────────────────────────────────
+  function toast(msg, type = 'info') {
+    const el = document.createElement('div');
+    el.className = `toast-msg ${type}`;
+    el.textContent = msg;
+    document.getElementById('toastContainer').appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+  }
+
+  function daysBetween(dateStr1, dateStr2) {
+    if (!dateStr1 || !dateStr2) return null;
+    const d1 = new Date(dateStr1);
+    const d2 = new Date(dateStr2);
+    return Math.round((d2 - d1) / 86400000);
+  }
+
+  /** Returns true if any consecutive stage transition exceeds 3 days */
+  function hasDelay(rec) {
+    // Cutting → Sewing
+    if (rec.cuttingDate && rec.sewingDate) {
+      const d = daysBetween(rec.cuttingDate, rec.sewingDate);
+      if (d !== null && d > 3) return true;
+    }
+    // Sewing → Washing
+    if (rec.sewingDate && rec.washingDate) {
+      const d = daysBetween(rec.sewingDate, rec.washingDate);
+      if (d !== null && d > 3) return true;
+    }
+    // If current stage is stalled (date set but no next date) beyond 3 days
+    const today = new Date().toISOString().slice(0, 10);
+    if (rec.cuttingDate && !rec.sewingDate) {
+      const d = daysBetween(rec.cuttingDate, today);
+      if (d !== null && d > 3) return true;
+    }
+    if (rec.sewingDate && !rec.washingDate) {
+      const d = daysBetween(rec.sewingDate, today);
+      if (d !== null && d > 3) return true;
+    }
+    return false;
+  }
+
+  function deriveStage(rec) {
+    if (rec.washingQty > 0) return { label: 'Complete',  cls: 'complete' };
+    if (rec.washingDate)    return { label: 'Washing',   cls: 'washing'  };
+    if (rec.sewingQty > 0)  return { label: 'Sewing',    cls: 'sewing'   };
+    if (rec.cuttingDate)    return { label: 'Cutting',   cls: 'cutting'  };
+    return { label: 'Pending', cls: 'cutting' };
+  }
+
+  function fmtDate(s) {
+    if (!s) return '—';
+    const [y, m, d] = s.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
+  function fmtN(n) { return n != null && n !== '' ? Number(n).toLocaleString() : '—'; }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  function renderTable() {
+    const q    = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+    const tbody = document.getElementById('prodTbody');
+    const list  = Object.entries(records)
+      .map(([id, r]) => ({ id, ...r }))
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+    const filtered = q
+      ? list.filter(r => (r.buyerName || '').toLowerCase().includes(q)
+                      || (r.styleNo   || '').toLowerCase().includes(q))
+      : list;
+
+    if (!filtered.length) {
+      tbody.innerHTML = `
+        <tr><td colspan="13">
+          <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            No production records found.
+          </div>
+        </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = filtered.map((rec, idx) => {
+      const wip      = ((rec.cuttingQty || 0) - (rec.sewingQty || 0));
+      const stage    = deriveStage(rec);
+      const delayed  = hasDelay(rec);
+      const rowCls   = delayed ? 'delay-alert' : '';
+
+      return `
+        <tr class="${rowCls}" data-id="${rec.id}">
+          <td>${idx + 1}</td>
+          <td><strong>${escHtml(rec.buyerName || '')}</strong>
+              ${delayed ? `<br><span class="delay-badge"><i class="fas fa-exclamation-triangle"></i> Delayed</span>` : ''}
+          </td>
+          <td>${escHtml(rec.styleNo || '')}</td>
+          <td>${fmtN(rec.totalQty)}</td>
+          <td>${fmtDate(rec.cuttingDate)}</td>
+          <td>${fmtN(rec.cuttingQty)}</td>
+          <td>${fmtDate(rec.sewingDate)}</td>
+          <td>${fmtN(rec.sewingQty)}</td>
+          <td><span class="wip-badge">${wip > 0 ? fmtN(wip) : '—'}</span></td>
+          <td>${fmtDate(rec.washingDate)}</td>
+          <td>${fmtN(rec.washingQty)}</td>
+          <td><span class="stage-chip ${stage.cls}">${stage.label}</span></td>
+          <td>
+            <div class="d-flex gap-1">
+              <button class="btn-outline-teal" style="padding:.25rem .6rem;font-size:.75rem"
+                      onclick="prodApp.editOrder('${rec.id}')" title="Edit">
+                <i class="fas fa-pencil-alt"></i>
+              </button>
+              <button class="btn-outline-teal" style="padding:.25rem .6rem;font-size:.75rem;border-color:#6c757d;color:#6c757d"
+                      onclick="prodApp.downloadPDF('${rec.id}')" title="Download PDF">
+                <i class="fas fa-file-pdf"></i>
+              </button>
+              <button class="btn-outline-teal" style="padding:.25rem .6rem;font-size:.75rem;border-color:var(--danger);color:var(--danger)"
+                      onclick="prodApp.deleteOrder('${rec.id}')" title="Delete">
+                <i class="fas fa-trash-alt"></i>
+              </button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+  }
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Firebase listeners ────────────────────────────────────────────────────
+  function startListening() {
+    const prodRef = ref(db, PROD_PATH);
+    onValue(prodRef, snap => {
+      records = snap.exists() ? snap.val() : {};
+      renderTable();
+    });
+  }
+
+  // ── prodApp public API ────────────────────────────────────────────────────
+  window.prodApp = {
+
+    /** Login with email + password */
+    async login() {
+      const email    = document.getElementById('loginEmail').value.trim();
+      const password = document.getElementById('loginPassword').value;
+      const errBox   = document.getElementById('loginError');
+      const errMsg   = document.getElementById('loginErrorMsg');
+      const btn      = document.getElementById('loginBtn');
+
+      errBox.style.display = 'none';
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Signing in…';
+
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        // onAuthStateChanged will handle UI switch
+      } catch (err) {
+        let msg = 'Login failed. Please check your credentials.';
+        if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password'
+            || err.code === 'auth/invalid-credential') {
+          msg = 'Invalid email or password.';
+        } else if (err.code === 'auth/too-many-requests') {
+          msg = 'Too many failed attempts. Please try again later.';
+        } else if (err.code === 'auth/network-request-failed') {
+          msg = 'Network error. Check your internet connection.';
+        }
+        errMsg.textContent = msg;
+        errBox.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>Sign In';
+      }
+    },
+
+    /** Logout */
+    async logout() {
+      await signOut(auth);
+    },
+
+    /** Save (add or update) an order */
+    async saveOrder(e) {
+      e.preventDefault();
+
+      const buyerName   = document.getElementById('buyerName').value.trim();
+      const styleNo     = document.getElementById('styleNo').value.trim();
+      const totalQty    = parseInt(document.getElementById('totalQty').value) || 0;
+      const cuttingDate = document.getElementById('cuttingDate').value;
+      const cuttingQty  = parseInt(document.getElementById('cuttingQty').value) || 0;
+      const sewingDate  = document.getElementById('sewingDate').value;
+      const sewingQty   = parseInt(document.getElementById('sewingQty').value) || 0;
+      const washingDate = document.getElementById('washingDate').value;
+      const washingQty  = parseInt(document.getElementById('washingQty').value) || 0;
+      const editId      = document.getElementById('editOrderId').value;
+
+      if (!buyerName || !styleNo || !totalQty) {
+        toast('Buyer Name, Style/Order No and Total Quantity are required.', 'error');
+        return;
+      }
+
+      const payload = {
+        buyerName, styleNo, totalQty,
+        cuttingDate, cuttingQty,
+        sewingDate,  sewingQty,
+        washingDate, washingQty,
+        updatedAt: Date.now(),
+      };
+
+      try {
+        if (editId) {
+          await set(ref(db, `${PROD_PATH}/${editId}`), { ...payload, createdAt: records[editId]?.createdAt || Date.now() });
+          toast('Order updated successfully.', 'success');
+        } else {
+          payload.createdAt = Date.now();
+          await push(ref(db, PROD_PATH), payload);
+          toast('Order added successfully.', 'success');
+        }
+        this.cancelEdit();
+      } catch (err) {
+        console.error(err);
+        toast('Failed to save order. Check permissions.', 'error');
+      }
+    },
+
+    /** Populate form for editing */
+    editOrder(id) {
+      const rec = records[id];
+      if (!rec) return;
+      document.getElementById('editOrderId').value  = id;
+      document.getElementById('buyerName').value    = rec.buyerName   || '';
+      document.getElementById('styleNo').value      = rec.styleNo     || '';
+      document.getElementById('totalQty').value     = rec.totalQty    || '';
+      document.getElementById('cuttingDate').value  = rec.cuttingDate || '';
+      document.getElementById('cuttingQty').value   = rec.cuttingQty  || 0;
+      document.getElementById('sewingDate').value   = rec.sewingDate  || '';
+      document.getElementById('sewingQty').value    = rec.sewingQty   || 0;
+      document.getElementById('washingDate').value  = rec.washingDate || '';
+      document.getElementById('washingQty').value   = rec.washingQty  || 0;
+      document.getElementById('orderForm').scrollIntoView({ behavior: 'smooth' });
+      toast('Record loaded for editing.', 'info');
+    },
+
+    /** Reset form */
+    cancelEdit() {
+      document.getElementById('editOrderId').value = '';
+      document.getElementById('orderForm').reset();
+    },
+
+    /** Delete an order */
+    async deleteOrder(id) {
+      if (!confirm('Delete this production record?')) return;
+      try {
+        await remove(ref(db, `${PROD_PATH}/${id}`));
+        toast('Record deleted.', 'info');
+      } catch (err) {
+        console.error(err);
+        toast('Failed to delete record.', 'error');
+      }
+    },
+
+    /** Download a PDF report for a single buyer/order */
+    downloadPDF(id) {
+      const rec = records[id];
+      if (!rec) return;
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+
+      // Header block
+      doc.setFillColor(10, 36, 66);  // sidebar-bg
+      doc.rect(0, 0, 595, 70, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text('TRACS APPAREL', 40, 32);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Production Status Report', 40, 50);
+      doc.setFontSize(9);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 40, 64);
+
+      // Buyer / order info
+      doc.setTextColor(30, 41, 59);
+      doc.setFontSize(13);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Buyer: ${rec.buyerName}`, 40, 95);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Style / Order No: ${rec.styleNo}`, 40, 113);
+      doc.text(`Total Quantity: ${Number(rec.totalQty).toLocaleString()}`, 40, 128);
+
+      const wip   = (rec.cuttingQty || 0) - (rec.sewingQty || 0);
+      const stage = deriveStage(rec);
+      const delayed = hasDelay(rec);
+
+      doc.text(`Current Stage: ${stage.label}${delayed ? '  ⚠ DELAYED' : ''}`, 40, 143);
+
+      // Workflow table
+      doc.autoTable({
+        startY: 162,
+        head: [['Stage', 'Date', 'Quantity', 'Notes']],
+        body: [
+          ['Cutting',         fmtDate(rec.cuttingDate), fmtN(rec.cuttingQty),  ''],
+          ['Sewing (Swing)',  fmtDate(rec.sewingDate),  fmtN(rec.sewingQty),   `WIP: ${wip > 0 ? fmtN(wip) : '—'}`],
+          ['Washing',         fmtDate(rec.washingDate), fmtN(rec.washingQty),  ''],
+        ],
+        headStyles: {
+          fillColor: [13, 115, 119],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+        },
+        alternateRowStyles: { fillColor: [238, 248, 249] },
+        styles: { fontSize: 10, cellPadding: 8 },
+        columnStyles: { 3: { cellWidth: 120 } },
+      });
+
+      if (delayed) {
+        const yAfterTable = doc.lastAutoTable.finalY + 16;
+        doc.setTextColor(231, 76, 60);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text('⚠  DELAY ALERT: One or more stages exceeded 3 days.', 40, yAfterTable);
+      }
+
+      // Footer
+      const pageH = doc.internal.pageSize.getHeight();
+      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.text('TRACS APPAREL — Confidential Production Report', 40, pageH - 20);
+
+      const safeStyle = (rec.styleNo || 'order').replace(/[^a-z0-9]/gi, '_');
+      doc.save(`Production_${rec.buyerName}_${safeStyle}.pdf`);
+      toast('PDF downloaded.', 'success');
+    },
+
+    /** Re-render table (called by search input) */
+    renderTable,
+  };
+
+  // ── Auth state listener ───────────────────────────────────────────────────
+  onAuthStateChanged(auth, user => {
+    if (user) {
+      document.getElementById('loginScreen').style.display = 'none';
+      const shell = document.getElementById('appShell');
+      shell.style.display = 'flex';
+      document.getElementById('headerUserEmail').textContent = user.email;
+      startListening();
+    } else {
+      document.getElementById('loginScreen').style.display = 'flex';
+      document.getElementById('appShell').style.display = 'none';
+      records = {};
+      const tbody = document.getElementById('prodTbody');
+      if (tbody) {
+        tbody.innerHTML = `
+          <tr><td colspan="13">
+            <div class="spinner-wrap">
+              <div class="spinner-border text-secondary" role="status">
+                <span class="visually-hidden">Loading…</span>
+              </div>
+            </div>
+          </td></tr>`;
+      }
+    }
+  });
+
+  // Allow Enter key to submit login
+  document.getElementById('loginPassword').addEventListener('keydown', e => {
+    if (e.key === 'Enter') prodApp.login();
+  });
+</script>
+
+<!-- Bootstrap 5 JS (needed for any Bootstrap widgets) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        crossorigin="anonymous"></script>
+</body>
+</html>

@@ -394,6 +394,7 @@ const app = {
       history:           'History',
       'monthly-summary': 'Monthly Summary',
       'payroll-reports': 'Payroll Reports',
+      production:        'Production Tracking',
     };
     document.getElementById('pageTitle').textContent = titles[view] || view;
 

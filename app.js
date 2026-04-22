@@ -1,7 +1,18 @@
 /* app.js — TRACS APPAREL Management Web App */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import { getAnalytics } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js';
-import { getDatabase, ref, set, push, get, child } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
+import { getDatabase, ref, set, push, get, child, update, onValue } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  updatePassword,
+  sendPasswordResetEmail,
+  createUserWithEmailAndPassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 
 // ─── Firebase ─────────────────────────────────────────────────────────────────
 
@@ -13,18 +24,26 @@ const firebaseConfig = {
   messagingSenderId: '1094008024729',
   appId: '1:1094008024729:web:11f1afa99df6272cee9208',
   measurementId: 'G-6ZD2M74F0P',
+  databaseURL: 'https://tracs-hr-mangment-default-rtdb.firebaseio.com',
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
 const database = getDatabase(firebaseApp);
+const auth = getAuth(firebaseApp);
 try { getAnalytics(firebaseApp); } catch (e) { console.warn('Analytics initialization failed:', e); }
+
+// ─── Auth State ────────────────────────────────────────────────────────────────
+let currentUser = null;
+let currentRole = null;
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
 const MS_PER_DAY = 86400000;
 const OT_RATE_FACTOR = 0.5 / 100;
 const DATA_PATH = 'tracsApparelData/shared';
-const STATIC_PASSWORD = 'tracsadmin';
+const PROD_PATH = 'tracsApparelData/production';
+const USERS_PATH = 'users';
+const ACTIVITY_PATH = 'activity_logs';
 
 let dataCache = defaultData();
 
@@ -246,6 +265,12 @@ const app = {
     const loginForm = document.getElementById('loginForm');
     if (loginForm) loginForm.addEventListener('submit', e => this.login(e));
 
+    const setupForm = document.getElementById('setupForm');
+    if (setupForm) setupForm.addEventListener('submit', e => this.createAdminAccount(e));
+
+    const changePassForm = document.getElementById('changePassForm');
+    if (changePassForm) changePassForm.addEventListener('submit', e => this.saveNewPassword(e));
+
     // Sidebar nav
     document.querySelectorAll('.nav-item').forEach(item => {
       item.addEventListener('click', e => {
@@ -275,27 +300,8 @@ const app = {
     });
 
     this._setAppAccess(false);
-    this._showLogin(true);
-
-    // Restore session if previously logged in
-    if (sessionStorage.getItem('tracsLoggedIn') === '1') {
-      await this._bootstrapSession();
-    }
-  },
-
-  async _bootstrapSession() {
-    try {
-      await loadDataFromCloud();
-      this._syncCompanyNameInput();
-      this._applyAuthHeader(true);
-      this._showLogin(false);
-      this._setAppAccess(true);
-      this.navigateTo('dashboard');
-    } catch (err) {
-      console.error('Session bootstrap failed:', err);
-      sessionStorage.removeItem('tracsLoggedIn');
-      showToast('Failed to load data. Please sign in again.', 'error');
-    }
+    this._hideOperatorShell();
+    // Auth state is managed by onAuthStateChanged at the bottom of this module
   },
 
   _syncCompanyNameInput() {
@@ -310,6 +316,16 @@ const app = {
     modal.classList.toggle('show', !!show);
   },
 
+  _showSetup(show) {
+    const el = document.getElementById('setupScreen');
+    if (el) el.style.display = show ? 'flex' : 'none';
+  },
+
+  _showChangePassword(show) {
+    const el = document.getElementById('changePasswordScreen');
+    if (el) el.style.display = show ? 'flex' : 'none';
+  },
+
   _setAppAccess(isAllowed) {
     const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
@@ -321,6 +337,16 @@ const app = {
     if (overlay && !isAllowed) overlay.classList.remove('show');
   },
 
+  _showOperatorShell() {
+    const el = document.getElementById('operatorShell');
+    if (el) el.style.display = 'flex';
+  },
+
+  _hideOperatorShell() {
+    const el = document.getElementById('operatorShell');
+    if (el) el.style.display = 'none';
+  },
+
   _applyAuthHeader(isLoggedIn) {
     const badge = document.getElementById('authUserBadge');
     const logoutBtn = document.getElementById('logoutBtn');
@@ -330,9 +356,21 @@ const app = {
       logoutBtn.style.display = 'none';
       return;
     }
-    badge.textContent = 'ADMIN';
+    const roleLabel = currentRole === 'operator' ? 'OPERATOR' : 'ADMIN';
+    badge.textContent = roleLabel;
+    badge.className = `auth-user-badge role-${currentRole || 'admin'}`;
     badge.style.display = 'inline-flex';
     logoutBtn.style.display = 'inline-flex';
+  },
+
+  _applyRoleBasedUI(role) {
+    // Show/hide sidebar nav items
+    document.querySelectorAll('.admin-only').forEach(el => {
+      el.style.display = role === 'admin' ? '' : 'none';
+    });
+    document.querySelectorAll('.operator-only').forEach(el => {
+      el.style.display = role === 'operator' ? '' : 'none';
+    });
   },
 
   toggleLoginPassword() {
@@ -344,40 +382,61 @@ const app = {
     icon.className = isHidden ? 'fas fa-eye-slash' : 'fas fa-eye';
   },
 
-  async login(evt) {
-    evt.preventDefault();
-    const password = document.getElementById('loginPassword').value;
-    const errorEl  = document.getElementById('loginError');
-    if (password !== STATIC_PASSWORD) {
-      if (errorEl) errorEl.style.display = 'flex';
+  async forgotPassword() {
+    const emailEl = document.getElementById('loginEmail');
+    const email = emailEl ? emailEl.value.trim() : '';
+    if (!email) {
+      showToast('Please enter your email address first.', 'warning');
       return;
     }
-    if (errorEl) errorEl.style.display = 'none';
-    sessionStorage.setItem('tracsLoggedIn', '1');
     try {
-      await loadDataFromCloud();
-      this._syncCompanyNameInput();
-      this._applyAuthHeader(true);
-      this._showLogin(false);
-      this._setAppAccess(true);
-      this.navigateTo('dashboard');
-      showToast('Signed in successfully.');
+      await sendPasswordResetEmail(auth, email);
+      showToast('Password reset email sent! Check your inbox.', 'success');
     } catch (err) {
-      console.error('Login bootstrap failed:', err);
-      sessionStorage.removeItem('tracsLoggedIn');
-      showToast('Failed to load data. Please try again.', 'error');
+      showToast('Could not send reset email. Check the address and try again.', 'error');
     }
   },
 
-  logout() {
-    sessionStorage.removeItem('tracsLoggedIn');
-    dataCache = defaultData();
-    this._applyAuthHeader(false);
-    this._setAppAccess(false);
-    this._showLogin(true);
-    const pwInput = document.getElementById('loginPassword');
-    if (pwInput) pwInput.value = '';
-    showToast('Logged out.', 'info');
+  async login(evt) {
+    evt.preventDefault();
+    const email    = (document.getElementById('loginEmail')?.value || '').trim();
+    const password = document.getElementById('loginPassword').value;
+    const errorEl  = document.getElementById('loginError');
+    const btn      = document.getElementById('loginSubmitBtn');
+
+    if (!email) {
+      if (errorEl) { errorEl.textContent = 'Please enter your email address.'; errorEl.style.display = 'flex'; }
+      return;
+    }
+
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in…'; }
+    if (errorEl) errorEl.style.display = 'none';
+
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      // onAuthStateChanged will handle the rest
+    } catch (err) {
+      let msg = 'Login failed. Please check your credentials.';
+      if (['auth/user-not-found', 'auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-email'].includes(err.code)) {
+        msg = 'Invalid email or password.';
+      } else if (err.code === 'auth/too-many-requests') {
+        msg = 'Too many failed attempts. Please try again later.';
+      } else if (err.code === 'auth/network-request-failed') {
+        msg = 'Network error. Check your internet connection.';
+      }
+      if (errorEl) { errorEl.textContent = msg; errorEl.style.display = 'flex'; }
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-right-to-bracket"></i> Sign In'; }
+    }
+  },
+
+  async logout() {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error('Logout failed:', e);
+    }
+    // onAuthStateChanged will handle UI reset
   },
 
   navigateTo(view) {
@@ -387,27 +446,31 @@ const app = {
     if (el) el.classList.add('active');
 
     const titles = {
-      dashboard:         'Dashboard',
-      employees:         'Employees',
-      'salary-entry':    'Salary Entry',
-      attendance:        'Attendance',
-      history:           'History',
-      'monthly-summary': 'Monthly Summary',
-      'payroll-reports': 'Payroll Reports',
-      production:        'Production Tracking',
+      dashboard:          'Dashboard',
+      employees:          'Employees',
+      'salary-entry':     'Salary Entry',
+      attendance:         'Attendance',
+      history:            'History',
+      'monthly-summary':  'Monthly Summary',
+      'payroll-reports':  'Payroll Reports',
+      production:         'Production Tracking',
+      'settings-users':   'Settings › Users',
+      'settings-activity':'Settings › Activity Log',
     };
     document.getElementById('pageTitle').textContent = titles[view] || view;
 
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('sidebarOverlay').classList.remove('show');
 
-    if (view === 'dashboard')       this.renderDashboard();
-    if (view === 'employees')       this.renderEmployees();
-    if (view === 'salary-entry')    this.loadSalaryEntrySelects();
-    if (view === 'attendance')      this.renderAttendanceManagement();
-    if (view === 'history')         this.renderHistory();
-    if (view === 'monthly-summary') { /* user clicks Load */ }
-    if (view === 'payroll-reports') this.renderPayrollReports();
+    if (view === 'dashboard')          this.renderDashboard();
+    if (view === 'employees')          this.renderEmployees();
+    if (view === 'salary-entry')       this.loadSalaryEntrySelects();
+    if (view === 'attendance')         this.renderAttendanceManagement();
+    if (view === 'history')            this.renderHistory();
+    if (view === 'monthly-summary')    { /* user clicks Load */ }
+    if (view === 'payroll-reports')    this.renderPayrollReports();
+    if (view === 'settings-users')     this.loadUsersPage();
+    if (view === 'settings-activity')  this.loadActivityLog();
   },
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
@@ -1628,9 +1691,479 @@ const app = {
     doc.save('Monthly_Summary_' + month + '.pdf');
     showToast('Monthly summary PDF downloaded!', 'info');
   },
+
+  // ── First-Time Setup ────────────────────────────────────────────────────────
+
+  async _checkFirstTimeSetup() {
+    try {
+      const snap = await get(ref(database, 'setup_complete'));
+      if (!snap.exists() || snap.val() !== true) {
+        this._showSetup(true);
+        this._showLogin(false);
+      } else {
+        this._showSetup(false);
+        this._showLogin(true);
+      }
+    } catch (e) {
+      this._showLogin(true);
+    }
+  },
+
+  async createAdminAccount(evt) {
+    evt.preventDefault();
+    const email  = (document.getElementById('setupEmail')?.value || '').trim();
+    const pass   = document.getElementById('setupPassword')?.value || '';
+    const pass2  = document.getElementById('setupPassword2')?.value || '';
+    const errEl  = document.getElementById('setupError');
+    const btn    = document.getElementById('setupBtn');
+
+    if (errEl) errEl.style.display = 'none';
+    if (pass.length < 6) {
+      if (errEl) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; }
+      return;
+    }
+    if (pass !== pass2) {
+      if (errEl) { errEl.textContent = 'Passwords do not match.'; errEl.style.display = 'block'; }
+      return;
+    }
+
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creating…'; }
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      const uid  = cred.user.uid;
+      await set(ref(database, `${USERS_PATH}/${uid}`), {
+        email, role: 'admin', status: 'active',
+        createdAt: Date.now(), lastLogin: Date.now(), mustChangePassword: false,
+      });
+      await set(ref(database, 'setup_complete'), true);
+      this._showSetup(false);
+      showToast('Admin account created! Welcome.', 'success');
+      // onAuthStateChanged fires automatically
+    } catch (err) {
+      let msg = 'Failed to create admin account.';
+      if (err.code === 'auth/email-already-in-use') msg = 'That email is already in use.';
+      if (err.code === 'auth/invalid-email')        msg = 'Invalid email address.';
+      if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-user-shield me-1"></i>Create Admin Account'; }
+    }
+  },
+
+  // ── Change Password (first login) ──────────────────────────────────────────
+
+  async saveNewPassword(evt) {
+    evt.preventDefault();
+    const newPass  = document.getElementById('newPassword')?.value || '';
+    const newPass2 = document.getElementById('newPassword2')?.value || '';
+    const errEl    = document.getElementById('changePassError');
+    const btn      = document.getElementById('changePassBtn');
+
+    if (errEl) errEl.style.display = 'none';
+    if (newPass.length < 6) {
+      if (errEl) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; }
+      return;
+    }
+    if (newPass !== newPass2) {
+      if (errEl) { errEl.textContent = 'Passwords do not match.'; errEl.style.display = 'block'; }
+      return;
+    }
+
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving…'; }
+    try {
+      await updatePassword(auth.currentUser, newPass);
+      await update(ref(database, `${USERS_PATH}/${auth.currentUser.uid}`), { mustChangePassword: false });
+      this._showChangePassword(false);
+      showToast('Password updated successfully!', 'success');
+      // Now proceed with normal login flow
+      await this._bootstrapAfterAuth(auth.currentUser);
+    } catch (err) {
+      let msg = 'Failed to update password.';
+      if (err.code === 'auth/requires-recent-login') msg = 'Session expired. Please log in again.';
+      if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-key me-1"></i>Set New Password'; }
+    }
+  },
+
+  async _bootstrapAfterAuth(user) {
+    try {
+      await loadDataFromCloud();
+      this._syncCompanyNameInput();
+      await update(ref(database, `${USERS_PATH}/${user.uid}`), { lastLogin: Date.now() });
+
+      if (currentRole === 'admin') {
+        this._setAppAccess(true);
+        this._hideOperatorShell();
+        this._applyAuthHeader(true);
+        this._applyRoleBasedUI('admin');
+        this.navigateTo('dashboard');
+        showToast('Welcome back, Admin!', 'success');
+      } else if (currentRole === 'operator') {
+        this._setAppAccess(false);
+        this._applyAuthHeader(false);
+        this._showOperatorShell();
+        const emailEl = document.getElementById('opUserEmail');
+        if (emailEl) emailEl.textContent = user.email;
+        this.loadOperatorOrders();
+        showToast('Signed in as Operator.', 'info');
+      }
+    } catch (err) {
+      console.error('Bootstrap after auth failed:', err);
+      showToast('Failed to load data. Please try again.', 'error');
+      await signOut(auth);
+    }
+  },
+
+  // ── Operator Dashboard ──────────────────────────────────────────────────────
+
+  loadOperatorOrders() {
+    const tbody = document.getElementById('opOrdersList');
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4">
+      <div class="spinner-border text-secondary" role="status"><span class="visually-hidden">Loading…</span></div>
+    </td></tr>`;
+
+    onValue(ref(database, PROD_PATH), snap => {
+      const records = snap.exists() ? snap.val() : {};
+      const list = Object.entries(records)
+        .map(([id, r]) => ({ id, ...r }))
+        .filter(r => !this._isOrderComplete(r))
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+      if (!list.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-5" style="color:#64748b">
+          <i class="fas fa-check-circle fa-2x mb-2 d-block opacity-25"></i>No active orders found.
+        </td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = list.map((rec, idx) => {
+        const stage = this._deriveStage(rec);
+        return `<tr>
+          <td><strong>#${idx + 1}</strong></td>
+          <td><strong>${escHtml(rec.buyerName || '—')}</strong></td>
+          <td>${escHtml(rec.styleNo || '—')}</td>
+          <td>${(rec.totalQty || 0).toLocaleString()}</td>
+          <td><span class="stage-chip ${stage.cls}">${stage.label}</span></td>
+          <td>
+            <button class="btn btn-sm btn-primary" onclick="app.openUpdateProdModal('${rec.id}')">
+              <i class="fas fa-edit me-1"></i>Update
+            </button>
+          </td>
+        </tr>`;
+      }).join('');
+    });
+  },
+
+  _isOrderComplete(rec) {
+    return (rec.washingQty || 0) > 0 && (rec.washingQty || 0) >= (rec.totalQty || 0);
+  },
+
+  _deriveStage(rec) {
+    if ((rec.washingQty || 0) > 0) return { label: 'Washing/Complete', cls: 'complete' };
+    if (rec.washingDate)            return { label: 'Washing',          cls: 'washing'  };
+    if ((rec.sewingQty || 0) > 0)   return { label: 'Sewing',           cls: 'sewing'   };
+    if (rec.cuttingDate)            return { label: 'Cutting',           cls: 'cutting'  };
+    return { label: 'Pending', cls: 'cutting' };
+  },
+
+  _opEditRecord: null,
+
+  async openUpdateProdModal(orderId) {
+    const snap = await get(ref(database, `${PROD_PATH}/${orderId}`));
+    if (!snap.exists()) return;
+    const rec = snap.val();
+    this._opEditRecord = { id: orderId, ...rec };
+
+    document.getElementById('opUpdateOrderId').value   = orderId;
+    document.getElementById('opUpdateBuyer').textContent = rec.buyerName || '—';
+    document.getElementById('opUpdateStyle').textContent = rec.styleNo || '—';
+    document.getElementById('opUpdateQty').textContent   = (rec.totalQty || 0).toLocaleString();
+
+    const stage = this._deriveStage(rec);
+    document.getElementById('opUpdateCurrentStage').textContent = stage.label;
+
+    // Reset form
+    document.getElementById('opUpdateStage').value = 'cutting';
+    document.getElementById('opUpdateDate').value  = new Date().toISOString().slice(0, 10);
+    document.getElementById('opUpdateQtyInput').value = '';
+    document.getElementById('opUpdateError').style.display = 'none';
+
+    document.getElementById('updateProdModal').classList.add('show');
+  },
+
+  closeUpdateProdModal() {
+    document.getElementById('updateProdModal').classList.remove('show');
+    this._opEditRecord = null;
+  },
+
+  async saveProductionUpdate(evt) {
+    evt.preventDefault();
+    const orderId   = document.getElementById('opUpdateOrderId').value;
+    const stage     = document.getElementById('opUpdateStage').value;
+    const date      = document.getElementById('opUpdateDate').value;
+    const qty       = parseInt(document.getElementById('opUpdateQtyInput').value) || 0;
+    const errEl     = document.getElementById('opUpdateError');
+    const btn       = document.getElementById('opUpdateSaveBtn');
+
+    if (errEl) errEl.style.display = 'none';
+    if (!date) {
+      if (errEl) { errEl.textContent = 'Please select a date.'; errEl.style.display = 'block'; }
+      return;
+    }
+    if (qty <= 0) {
+      if (errEl) { errEl.textContent = 'Quantity must be greater than 0.'; errEl.style.display = 'block'; }
+      return;
+    }
+
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving…'; }
+
+    try {
+      const snap = await get(ref(database, `${PROD_PATH}/${orderId}`));
+      if (!snap.exists()) throw new Error('Order not found');
+      const rec = snap.val();
+
+      const fieldMap = {
+        cutting: { dateField: 'cuttingDate', qtyField: 'cuttingQty' },
+        sewing:  { dateField: 'sewingDate',  qtyField: 'sewingQty'  },
+        washing: { dateField: 'washingDate', qtyField: 'washingQty' },
+      };
+      const fields = fieldMap[stage];
+      if (!fields) throw new Error('Invalid stage');
+
+      const oldQty = rec[fields.qtyField] || 0;
+      const updates = {
+        [fields.dateField]: date,
+        [fields.qtyField]:  qty,
+        updatedAt:          Date.now(),
+      };
+
+      await update(ref(database, `${PROD_PATH}/${orderId}`), updates);
+
+      // Log activity
+      const user = auth.currentUser;
+      await push(ref(database, ACTIVITY_PATH), {
+        userEmail:  user ? user.email : 'Unknown',
+        userId:     user ? user.uid : '',
+        orderKey:   orderId,
+        buyerName:  rec.buyerName || '',
+        styleNo:    rec.styleNo || '',
+        stage:      stage.charAt(0).toUpperCase() + stage.slice(1),
+        oldQty,
+        newQty:     qty,
+        timestamp:  Date.now(),
+      });
+
+      this.closeUpdateProdModal();
+      showOpToast('Production updated successfully!', 'success');
+    } catch (err) {
+      console.error('Save production update failed:', err);
+      if (errEl) { errEl.textContent = 'Failed to save update. Please try again.'; errEl.style.display = 'block'; }
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>Save Update'; }
+    }
+  },
+
+  // ── Admin: User Management ──────────────────────────────────────────────────
+
+  async loadUsersPage() {
+    const tbody = document.getElementById('usersTableTbody');
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4">
+      <div class="spinner-border text-secondary" role="status"></div>
+    </td></tr>`;
+
+    try {
+      const snap = await get(ref(database, USERS_PATH));
+      const users = snap.exists() ? snap.val() : {};
+      const list = Object.entries(users).map(([uid, u]) => ({ uid, ...u }));
+
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No users found.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list.map(u => {
+        const lastLogin = u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'Never';
+        const statusBadge = u.status === 'active'
+          ? '<span class="badge bg-success">Active</span>'
+          : '<span class="badge bg-secondary">Inactive</span>';
+        const roleBadge = u.role === 'admin'
+          ? '<span class="badge bg-primary">Admin</span>'
+          : '<span class="badge bg-info text-dark">Operator</span>';
+        return `<tr>
+          <td>${esc(u.email || '')}</td>
+          <td>${roleBadge}</td>
+          <td>${statusBadge}</td>
+          <td>${lastLogin}</td>
+          <td>
+            <div class="d-flex gap-1 flex-wrap">
+              ${u.role !== 'admin' ? `
+              <button class="btn btn-sm btn-outline-secondary"
+                      onclick="app.toggleUserStatus('${u.uid}', ${u.status !== 'active'})"
+                      title="${u.status === 'active' ? 'Deactivate' : 'Activate'}">
+                <i class="fas fa-${u.status === 'active' ? 'user-slash' : 'user-check'}"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-warning"
+                      onclick="app.resetUserPasswordAdmin('${esc(u.email || '')}')"
+                      title="Send Password Reset">
+                <i class="fas fa-key"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-danger"
+                      onclick="app.confirmDeleteUser('${u.uid}', '${esc(u.email || '')}')"
+                      title="Delete User">
+                <i class="fas fa-trash"></i>
+              </button>` : '<span class="text-muted" style="font-size:.8rem">—</span>'}
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state text-danger">Failed to load users.</td></tr>';
+    }
+  },
+
+  async addOperator(evt) {
+    evt.preventDefault();
+    const email   = (document.getElementById('newOpEmail')?.value || '').trim();
+    const pass    = document.getElementById('newOpPassword')?.value || '';
+    const errEl   = document.getElementById('addOpError');
+    const resultEl = document.getElementById('addOpResult');
+    const btn     = document.getElementById('addOpBtn');
+
+    if (errEl) errEl.style.display = 'none';
+    if (resultEl) resultEl.style.display = 'none';
+    if (!email || pass.length < 6) {
+      if (errEl) { errEl.textContent = 'Email and password (min 6 chars) required.'; errEl.style.display = 'block'; }
+      return;
+    }
+
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creating…'; }
+
+    try {
+      // Use secondary Firebase app to create user without logging out admin
+      const secondaryApp = initializeApp(firebaseConfig, `secondary-${Date.now()}`);
+      const secondaryAuth = getAuth(secondaryApp);
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, email, pass);
+      const uid = cred.user.uid;
+      await signOut(secondaryAuth);
+
+      await set(ref(database, `${USERS_PATH}/${uid}`), {
+        email, role: 'operator', status: 'active',
+        createdAt: Date.now(), lastLogin: null, mustChangePassword: true,
+      });
+
+      document.getElementById('newOpEmail').value = '';
+      document.getElementById('newOpPassword').value = '';
+      if (resultEl) {
+        resultEl.innerHTML = `<strong>Operator created!</strong><br>
+          Email: <code>${esc(email)}</code><br>
+          Temp Password: <code>${esc(pass)}</code><br>
+          <small class="text-muted">Copy and share these credentials. The operator will be prompted to change their password on first login.</small>`;
+        resultEl.style.display = 'block';
+      }
+      showToast('Operator account created!', 'success');
+      this.loadUsersPage();
+    } catch (err) {
+      let msg = 'Failed to create operator.';
+      if (err.code === 'auth/email-already-in-use') msg = 'That email is already in use.';
+      if (err.code === 'auth/invalid-email')        msg = 'Invalid email address.';
+      if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-user-plus me-1"></i>Add Operator'; }
+    }
+  },
+
+  async toggleUserStatus(uid, makeActive) {
+    try {
+      await update(ref(database, `${USERS_PATH}/${uid}`), { status: makeActive ? 'active' : 'inactive' });
+      showToast(`User ${makeActive ? 'activated' : 'deactivated'}.`, 'info');
+      this.loadUsersPage();
+    } catch (e) {
+      showToast('Failed to update user status.', 'error');
+    }
+  },
+
+  async resetUserPasswordAdmin(email) {
+    if (!email) return;
+    try {
+      await sendPasswordResetEmail(auth, email);
+      showToast(`Password reset email sent to ${email}.`, 'success');
+    } catch (e) {
+      showToast('Failed to send password reset email.', 'error');
+    }
+  },
+
+  confirmDeleteUser(uid, email) {
+    document.getElementById('confirmMessage').textContent =
+      `Delete user "${email}"? This cannot be undone.`;
+    document.getElementById('confirmBtn').onclick = () => this.deleteUserFromDb(uid);
+    document.getElementById('confirmModal').classList.add('show');
+  },
+
+  async deleteUserFromDb(uid) {
+    try {
+      await set(ref(database, `${USERS_PATH}/${uid}`), null);
+      this.closeConfirmModal();
+      showToast('User removed from database.', 'info');
+      this.loadUsersPage();
+    } catch (e) {
+      showToast('Failed to delete user.', 'error');
+    }
+  },
+
+  // ── Admin: Activity Log ──────────────────────────────────────────────────────
+
+  async loadActivityLog() {
+    const tbody   = document.getElementById('activityLogTbody');
+    const searchEl = document.getElementById('activitySearch');
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4">
+      <div class="spinner-border text-secondary" role="status"></div>
+    </td></tr>`;
+
+    try {
+      const snap = await get(ref(database, ACTIVITY_PATH));
+      const raw  = snap.exists() ? snap.val() : {};
+      let logs = Object.values(raw)
+        .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+        .slice(0, 100);
+
+      const render = (filter = '') => {
+        const lf = filter.toLowerCase().trim();
+        const filtered = lf
+          ? logs.filter(l =>
+              (l.userEmail  || '').toLowerCase().includes(lf) ||
+              (l.buyerName  || '').toLowerCase().includes(lf) ||
+              (l.styleNo    || '').toLowerCase().includes(lf) ||
+              (l.stage      || '').toLowerCase().includes(lf))
+          : logs;
+
+        if (!filtered.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No activity found.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = filtered.map(l => `<tr>
+          <td>${new Date(l.timestamp || 0).toLocaleString()}</td>
+          <td>${esc(l.userEmail || '—')}</td>
+          <td>${esc(l.buyerName || '—')}</td>
+          <td>${esc(l.styleNo   || '—')}</td>
+          <td>${esc(l.stage     || '—')}</td>
+          <td>${(l.oldQty || 0).toLocaleString()} → ${(l.newQty || 0).toLocaleString()}</td>
+        </tr>`).join('');
+      };
+
+      render(searchEl ? searchEl.value : '');
+      if (searchEl) {
+        searchEl.oninput = () => render(searchEl.value);
+      }
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state text-danger">Failed to load activity log.</td></tr>';
+    }
+  },
 };
 
-// ─── HTML escape helper ────────────────────────────────────────────────────────
+// ─── HTML escape helpers ───────────────────────────────────────────────────────
 
 function esc(str) {
   return String(str)
@@ -1639,6 +2172,23 @@ function esc(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function escHtml(str) { return esc(str); }
+
+// ─── Operator Toast ────────────────────────────────────────────────────────────
+
+function showOpToast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = `toast-msg ${type}`;
+  el.textContent = msg;
+  const container = document.getElementById('opToastContainer') || document.getElementById('toast-container');
+  if (container) {
+    container.appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+  } else {
+    showToast(msg, type);
+  }
 }
 
 // ─── Boot ──────────────────────────────────────────────────────────────────────
@@ -1650,5 +2200,52 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (err) {
     console.error('App initialization failed:', err);
     showToast('Failed to initialize app.', 'error');
+  }
+});
+
+// ─── Firebase Auth State Listener ─────────────────────────────────────────────
+
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    currentUser = user;
+    try {
+      const snap = await get(ref(database, `${USERS_PATH}/${user.uid}/role`));
+      currentRole = snap.exists() ? snap.val() : null;
+
+      if (!currentRole) {
+        // No role assigned — sign out
+        showToast('Your account has no role assigned. Contact the admin.', 'error');
+        await signOut(auth);
+        return;
+      }
+
+      // Check must-change-password flag
+      const mustSnap = await get(ref(database, `${USERS_PATH}/${user.uid}/mustChangePassword`));
+      if (mustSnap.val() === true) {
+        app._showLogin(false);
+        app._setAppAccess(false);
+        app._hideOperatorShell();
+        app._showChangePassword(true);
+        return;
+      }
+
+      app._showLogin(false);
+      app._showChangePassword(false);
+      await app._bootstrapAfterAuth(user);
+    } catch (err) {
+      console.error('Auth state handling failed:', err);
+      showToast('Error loading account. Please try again.', 'error');
+      await signOut(auth);
+    }
+  } else {
+    currentUser = null;
+    currentRole = null;
+    dataCache = defaultData();
+    app._applyAuthHeader(false);
+    app._setAppAccess(false);
+    app._hideOperatorShell();
+    app._showChangePassword(false);
+    // Check first-time setup
+    await app._checkFirstTimeSetup();
   }
 });

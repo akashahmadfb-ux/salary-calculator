@@ -181,6 +181,10 @@
       <a class="nav-item admin-only" data-view="production" href="#">
         <i class="fas fa-industry"></i><span>Production Tracking</span>
       </a>
+      <a class="nav-item admin-only" data-view="correction-admin" href="#">
+        <i class="fas fa-ticket-alt"></i><span>Correction Requests</span>
+        <span class="correction-badge ms-auto d-none" id="correctionBadgeCount">0</span>
+      </a>
       <div class="nav-divider admin-only"></div>
       <a class="nav-item admin-only" data-view="settings-users" href="#">
         <i class="fas fa-users-cog"></i><span>Users</span>
@@ -423,32 +427,80 @@
 
     <!-- ── Attendance Management View ───────────────────────────────────────── -->
     <div class="view" id="view-attendance">
-      <div class="card">
+      <!-- Admin date picker -->
+      <div class="card admin-only" id="att-admin-controls">
         <div class="card-header">
-          <h2>Attendance Management</h2>
+          <h2><i class="fas fa-calendar-check" style="color:var(--primary);margin-right:6px"></i>Daily Attendance — IN/OUT Tracking</h2>
           <div class="attendance-actions">
-            <input type="month" id="att-man-month" aria-label="Select attendance month" onchange="app.onAttendanceMonthChange()">
-            <input type="date" id="att-man-date" aria-label="Select attendance date" onchange="app.onAttendanceDateChange()">
+            <label style="font-size:.85rem;font-weight:600;color:var(--text-secondary);margin-right:4px">Date:</label>
+            <input type="date" id="att-man-date" aria-label="Select attendance date"
+                   onchange="app.onAttendanceDateChange()">
           </div>
         </div>
         <div class="att-man-summary" id="att-man-summary">
-          <span class="att-sum-item att-sum-p"><i class="fas fa-check-circle"></i> Present: <strong id="att-man-p">0</strong></span>
-          <span class="att-sum-item att-sum-a"><i class="fas fa-times-circle"></i> Absent: <strong id="att-man-a">0</strong></span>
-          <span class="att-sum-item att-sum-h"><i class="fas fa-star"></i> Holiday: <strong id="att-man-h">0</strong></span>
+          <span class="att-sum-item" style="color:#16a34a"><i class="fas fa-check-circle"></i> Present: <strong id="att-man-p">0</strong></span>
+          <span class="att-sum-item" style="color:#854d0e"><i class="fas fa-clock"></i> Late: <strong id="att-man-l">0</strong></span>
+          <span class="att-sum-item" style="color:#991b1b"><i class="fas fa-exclamation-triangle"></i> Penalty Late: <strong id="att-man-pl">0</strong></span>
+          <span class="att-sum-item" style="color:#475569"><i class="fas fa-times-circle"></i> Absent: <strong id="att-man-a">0</strong></span>
+          <span class="att-sum-item" style="color:#7c3aed"><i class="fas fa-star"></i> Holiday: <strong id="att-man-h">0</strong></span>
         </div>
         <div class="table-responsive">
-          <table class="data-table">
+          <table class="data-table att-daily-table">
             <thead>
               <tr>
                 <th>Employee</th>
                 <th>ID</th>
+                <th>IN Time</th>
+                <th>OUT Time</th>
+                <th>Reg. Hours</th>
+                <th>OT Hours</th>
                 <th>Status</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="attendance-list-tbody">
-              <tr><td colspan="3" class="empty-state">No employees found</td></tr>
+              <tr><td colspan="8" class="empty-state">No employees found</td></tr>
             </tbody>
           </table>
+        </div>
+        <div class="p-3 pt-0">
+          <small class="text-muted">
+            <i class="fas fa-info-circle me-1"></i>
+            <span class="att-badge-P att-status-badge">P</span> IN ≤ 08:05 &nbsp;
+            <span class="att-badge-L att-status-badge">L</span> IN 08:06–08:15 &nbsp;
+            <span class="att-badge-PL att-status-badge">PL</span> IN > 08:15 &nbsp;
+            OT = any work after 17:00
+          </small>
+        </div>
+      </div>
+
+      <!-- PL deduction summary card -->
+      <div class="card admin-only" id="att-pl-summary-card" style="margin-top:1rem">
+        <div class="card-header">
+          <h2><i class="fas fa-exclamation-triangle" style="color:var(--warning);margin-right:6px"></i>Monthly PL Penalty Summary</h2>
+          <div class="attendance-actions">
+            <input type="month" id="att-pl-month" aria-label="PL summary month"
+                   onchange="app.renderPLSummary()">
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table" style="font-size:.82rem">
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>ID</th>
+                <th>PL Days This Month</th>
+                <th>Days Deducted</th>
+                <th>Effective Payable Days</th>
+              </tr>
+            </thead>
+            <tbody id="att-pl-tbody">
+              <tr><td colspan="5" class="empty-state">Select month above</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="p-3 pt-0">
+          <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Every 3 PL days = 1 extra day deducted from payable days.</small>
         </div>
       </div>
     </div>
@@ -584,195 +636,287 @@
     <!-- ── Production Tracking View ──────────────────────────────────────── -->
     <div class="view" id="view-production">
 
-      <!-- Production login screen -->
-      <div id="prod-loginScreen">
-        <div class="prod-login-card">
-          <div class="prod-login-logo">
-            <i class="fas fa-industry"></i>
-            <h2>TRACS APPAREL</h2>
-            <p>Production Tracking Module</p>
-          </div>
-          <div id="prod-loginError">
-            <i class="fas fa-exclamation-circle me-1"></i>
-            <span id="prod-loginErrorMsg">Invalid credentials.</span>
-          </div>
-          <div class="mb-3">
-            <label class="form-label" for="prod-loginEmail">
-              <i class="fas fa-envelope me-1"></i>Gmail Address
-            </label>
-            <input type="email" class="form-control" id="prod-loginEmail"
-                   placeholder="you@gmail.com" autocomplete="email" required>
-          </div>
-          <div class="mb-4">
-            <label class="form-label" for="prod-loginPassword">
-              <i class="fas fa-lock me-1"></i>Password
-            </label>
-            <input type="password" class="form-control" id="prod-loginPassword"
-                   placeholder="••••••••" autocomplete="current-password" required>
-          </div>
-          <button class="btn-prod-login" id="prod-loginBtn" onclick="prodApp.login()">
-            <i class="fas fa-sign-in-alt me-2"></i>Sign In
+      <!-- Admin order entry form -->
+      <div class="card-panel admin-only" id="prod-admin-form">
+        <div class="card-panel-header">
+          <h2><i class="fas fa-plus-circle me-2"></i>Add / Edit Production Order</h2>
+          <button type="button" class="btn-outline-teal" onclick="app.cancelProdEdit()">
+            <i class="fas fa-times me-1"></i>Reset
           </button>
-          <p class="text-center mt-3" style="font-size:.75rem;color:var(--text-secondary)">
-            Secured by Firebase Authentication
-          </p>
+        </div>
+        <div class="card-panel-body">
+          <form id="adminOrderForm" onsubmit="app.saveAdminOrder(event)" novalidate>
+            <input type="hidden" id="adminEditOrderId">
+
+            <div class="section-divider"><i class="fas fa-clipboard-list"></i> Order Details</div>
+            <div class="row g-3 mb-3">
+              <div class="col-md-3">
+                <label class="form-label" for="admin-buyerName">Buyer Name *</label>
+                <input type="text" class="form-control" id="admin-buyerName" placeholder="e.g. H&M, Zara" required>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label" for="admin-styleNo">Style / Order No *</label>
+                <input type="text" class="form-control" id="admin-styleNo" placeholder="e.g. ZR-2024-001" required>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label" for="admin-totalQty">Total Quantity *</label>
+                <input type="number" class="form-control" id="admin-totalQty" min="1" placeholder="e.g. 5000" required>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label" for="admin-status">Order Status</label>
+                <select class="form-select" id="admin-status">
+                  <option value="active">Active</option>
+                  <option value="complete">Complete</option>
+                  <option value="hold">On Hold</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+              <!-- Cutting -->
+              <div class="col-md-4">
+                <div class="card p-3 h-100">
+                  <div class="section-divider"><i class="fas fa-cut"></i> Cutting</div>
+                  <div class="mb-2">
+                    <label class="form-label mb-1">Date</label>
+                    <input type="date" class="form-control form-control-sm" id="admin-cuttingDate">
+                  </div>
+                  <div>
+                    <label class="form-label mb-1">Qty Cut</label>
+                    <input type="number" class="form-control form-control-sm" id="admin-cuttingQty" min="0" placeholder="0">
+                  </div>
+                </div>
+              </div>
+              <!-- Sewing -->
+              <div class="col-md-4">
+                <div class="card p-3 h-100">
+                  <div class="section-divider"><i class="fas fa-scissors"></i> Sewing</div>
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <label class="form-label mb-1">Input Date</label>
+                      <input type="date" class="form-control form-control-sm" id="admin-sewingInDate">
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label mb-1">Input Qty</label>
+                      <input type="number" class="form-control form-control-sm" id="admin-sewingInQty" min="0" placeholder="0">
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label mb-1">Output Date</label>
+                      <input type="date" class="form-control form-control-sm" id="admin-sewingOutDate">
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label mb-1">Output Qty</label>
+                      <input type="number" class="form-control form-control-sm" id="admin-sewingOutQty" min="0" placeholder="0">
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- Wash + Finishing -->
+              <div class="col-md-4">
+                <div class="card p-3 h-100">
+                  <div class="section-divider"><i class="fas fa-tint"></i> Wash &amp; Finishing</div>
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <label class="form-label mb-1">Wash Date</label>
+                      <input type="date" class="form-control form-control-sm" id="admin-washDate">
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label mb-1">Wash Qty</label>
+                      <input type="number" class="form-control form-control-sm" id="admin-washQty" min="0" placeholder="0">
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label mb-1">Finishing Date</label>
+                      <input type="date" class="form-control form-control-sm" id="admin-finishingDate">
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label mb-1">Finishing Qty</label>
+                      <input type="number" class="form-control form-control-sm" id="admin-finishingQty" min="0" placeholder="0">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-2">
+              <button type="submit" class="btn-primary-teal">
+                <i class="fas fa-save me-1"></i>Save Order
+              </button>
+              <button type="button" class="btn-outline-teal" onclick="app.cancelProdEdit()">
+                <i class="fas fa-times me-1"></i>Cancel
+              </button>
+            </div>
+          </form>
         </div>
       </div>
 
-      <!-- Production app shell (shown after login) -->
-      <div id="prod-appShell" style="display:none;">
-        <header class="prod-app-header">
-          <div class="prod-brand">
-            <i class="fas fa-industry"></i>
-            <div>
-              TRACS APPAREL
-              <small>Production Tracking</small>
-            </div>
+      <!-- Production Records Table -->
+      <div class="card-panel">
+        <div class="card-panel-header">
+          <h2><i class="fas fa-table me-2"></i>Production Records</h2>
+          <div class="d-flex gap-2 align-items-center">
+            <select id="prodStatusFilter" class="form-select form-select-sm"
+                    onchange="app.renderProductionTable()"
+                    style="width:130px;background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3)">
+              <option value="all">All Orders</option>
+              <option value="active" selected>Active Only</option>
+              <option value="complete">Complete</option>
+            </select>
+            <input type="text" id="prodSearchInput" class="form-control form-control-sm"
+                   placeholder="Search buyer / style…"
+                   oninput="app.renderProductionTable()"
+                   style="width:180px;background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3);"
+                   aria-label="Search records">
           </div>
-          <div class="prod-header-right">
-            <span class="prod-user-badge">
-              <i class="fas fa-user-circle"></i>
-              <span id="prod-headerUserEmail"></span>
-            </span>
-            <button class="btn-prod-logout" onclick="prodApp.logout()">
-              <i class="fas fa-sign-out-alt me-1"></i>Logout
-            </button>
+        </div>
+        <div class="card-panel-body p-0">
+          <div class="table-responsive">
+            <table class="prod-table" id="adminProdTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Buyer</th>
+                  <th>Style / Order No</th>
+                  <th>Total Qty</th>
+                  <th>Progress</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="adminProdTbody">
+                <tr>
+                  <td colspan="7">
+                    <div class="spinner-wrap">
+                      <div class="spinner-border text-secondary" role="status">
+                        <span class="visually-hidden">Loading…</span>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-        </header>
-
-        <div class="prod-main-content">
-
-          <!-- Order Entry Form -->
-          <div class="card-panel">
-            <div class="card-panel-header">
-              <h2><i class="fas fa-plus-circle me-2"></i>Add / Update Production Order</h2>
-            </div>
-            <div class="card-panel-body">
-              <form id="orderForm" onsubmit="prodApp.saveOrder(event)" novalidate>
-                <input type="hidden" id="editOrderId">
-
-                <div class="section-divider"><i class="fas fa-clipboard-list"></i> Order Details</div>
-                <div class="row g-3 mb-3">
-                  <div class="col-md-4">
-                    <label class="form-label" for="buyerName">Buyer Name *</label>
-                    <input type="text" class="form-control" id="buyerName"
-                           placeholder="e.g. H&amp;M, Zara, Next" required>
-                  </div>
-                  <div class="col-md-4">
-                    <label class="form-label" for="styleNo">Style / Order No *</label>
-                    <input type="text" class="form-control" id="styleNo"
-                           placeholder="e.g. H&amp;M-2024-001" required>
-                  </div>
-                  <div class="col-md-4">
-                    <label class="form-label" for="totalQty">Total Quantity *</label>
-                    <input type="number" class="form-control" id="totalQty"
-                           min="1" placeholder="e.g. 5000" required>
-                  </div>
-                </div>
-
-                <div class="section-divider"><i class="fas fa-cut"></i> Cutting</div>
-                <div class="row g-3 mb-3">
-                  <div class="col-md-6">
-                    <label class="form-label" for="cuttingDate">Cutting Date</label>
-                    <input type="date" class="form-control" id="cuttingDate">
-                  </div>
-                  <div class="col-md-6">
-                    <label class="form-label" for="cuttingQty">Qty Cut</label>
-                    <input type="number" class="form-control" id="cuttingQty" min="0" placeholder="0">
-                  </div>
-                </div>
-
-                <div class="section-divider"><i class="fas fa-scissors"></i> Sewing (Swing)</div>
-                <div class="row g-3 mb-3">
-                  <div class="col-md-6">
-                    <label class="form-label" for="sewingDate">Date Moved to Sewing</label>
-                    <input type="date" class="form-control" id="sewingDate">
-                  </div>
-                  <div class="col-md-6">
-                    <label class="form-label" for="sewingQty">Qty Sewn</label>
-                    <input type="number" class="form-control" id="sewingQty" min="0" placeholder="0">
-                  </div>
-                </div>
-
-                <div class="section-divider"><i class="fas fa-tint"></i> Washing</div>
-                <div class="row g-3 mb-3">
-                  <div class="col-md-6">
-                    <label class="form-label" for="washingDate">Date Moved to Washing</label>
-                    <input type="date" class="form-control" id="washingDate">
-                  </div>
-                  <div class="col-md-6">
-                    <label class="form-label" for="washingQty">Qty Received from Wash</label>
-                    <input type="number" class="form-control" id="washingQty" min="0" placeholder="0">
-                  </div>
-                </div>
-
-                <div class="d-flex gap-2 mt-3">
-                  <button type="submit" class="btn-primary-teal">
-                    <i class="fas fa-save me-1"></i>Save Order
-                  </button>
-                  <button type="button" class="btn-outline-teal" onclick="prodApp.cancelEdit()">
-                    <i class="fas fa-times me-1"></i>Cancel / Reset
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-
-          <!-- Production Records Table -->
-          <div class="card-panel">
-            <div class="card-panel-header">
-              <h2><i class="fas fa-table me-2"></i>Production Records (Buyer Wise)</h2>
-              <div class="d-flex gap-2 align-items-center">
-                <input type="text" id="searchInput" class="form-control form-control-sm"
-                       placeholder="Search buyer / style…"
-                       oninput="prodApp.renderTable()"
-                       style="width:180px;background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3);"
-                       aria-label="Search records">
-              </div>
-            </div>
-            <div class="card-panel-body p-0">
-              <div class="table-responsive">
-                <table class="prod-table" id="prodTable">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Buyer</th>
-                      <th>Style / Order No</th>
-                      <th>Total Qty</th>
-                      <th>Cut Date</th>
-                      <th>Cut Qty</th>
-                      <th>Sewing Date</th>
-                      <th>Sewing Qty</th>
-                      <th>WIP<br><small style="font-weight:400;opacity:.8">(Cut &minus; Sewn)</small></th>
-                      <th>Wash Date</th>
-                      <th>Wash Qty</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="prodTbody">
-                    <tr>
-                      <td colspan="13">
-                        <div class="spinner-wrap">
-                          <div class="spinner-border text-secondary" role="status">
-                            <span class="visually-hidden">Loading…</span>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-        </div><!-- /prod-main-content -->
-      </div><!-- /prod-appShell -->
+        </div>
+      </div>
 
       <!-- Production toast notifications -->
       <div id="prod-toastContainer"></div>
 
     </div><!-- /view-production -->
+
+    <!-- ── Settings › Users View ──────────────────────────────────────────── -->
+    <div class="view" id="view-settings-users">
+      <!-- Add Operator Form -->
+      <div class="users-card" style="margin-bottom:1.5rem">
+        <div class="users-card-header">
+          <h2><i class="fas fa-user-plus me-2"></i>Add Operator Account</h2>
+        </div>
+        <div class="p-4">
+          <form id="addOperatorForm" onsubmit="app.addOperator(event)" class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Email *</label>
+              <input type="email" class="form-control" id="newOpEmail" placeholder="operator@example.com" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Temporary Password *</label>
+              <input type="password" class="form-control" id="newOpPassword" placeholder="Min 6 characters" required>
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+              <button type="submit" id="addOpBtn" class="btn btn-primary w-100">
+                <i class="fas fa-user-plus me-1"></i>Add Operator
+              </button>
+            </div>
+          </form>
+          <div id="addOpError" class="login-error mt-2" style="display:none">
+            <i class="fas fa-exclamation-circle"></i> <span></span>
+          </div>
+          <div id="addOpResult" class="alert alert-success mt-2" style="display:none;font-size:.85rem"></div>
+        </div>
+      </div>
+
+      <!-- Users table -->
+      <div class="users-card">
+        <div class="users-card-header">
+          <h2><i class="fas fa-users-cog me-2"></i>All Users</h2>
+          <button class="btn btn-sm btn-outline-light" onclick="app.loadUsersPage()">
+            <i class="fas fa-sync-alt me-1"></i>Refresh
+          </button>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Last Login</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableTbody">
+              <tr><td colspan="5" class="empty-state">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Settings › Activity Log View ─────────────────────────────────────── -->
+    <div class="view" id="view-settings-activity">
+      <div class="users-card">
+        <div class="users-card-header">
+          <h2><i class="fas fa-clipboard-list me-2"></i>Production Activity Log</h2>
+          <div class="activity-log-search">
+            <i class="fas fa-search" style="color:rgba(255,255,255,.6)"></i>
+            <input type="text" id="activitySearch" placeholder="Search user / buyer / stage…"
+                   style="background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3);">
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table" style="font-size:.82rem">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>User</th>
+                <th>Buyer</th>
+                <th>Style No</th>
+                <th>Stage</th>
+                <th>Qty Change</th>
+              </tr>
+            </thead>
+            <tbody id="activityLogTbody">
+              <tr><td colspan="6" class="empty-state">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Correction Requests View (Admin) ────────────────────────────────── -->
+    <div class="view" id="view-correction-admin">
+      <div class="users-card">
+        <div class="users-card-header">
+          <h2><i class="fas fa-ticket-alt me-2"></i>Attendance Correction Requests</h2>
+          <div class="d-flex gap-2">
+            <select id="correctionFilterStatus" class="form-select form-select-sm"
+                    onchange="app.loadCorrectionRequestsAdmin()"
+                    style="width:130px;background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3)">
+              <option value="pending">Pending</option>
+              <option value="all">All</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+            <button class="btn btn-sm btn-outline-light" onclick="app.loadCorrectionRequestsAdmin()">
+              <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+          </div>
+        </div>
+        <div class="p-3" id="correctionAdminList">
+          <div class="text-center py-4 text-muted">
+            <div class="spinner-border text-secondary" role="status"></div>
+          </div>
+        </div>
+      </div>
+    </div>
 
   </main><!-- /main-content -->
 
@@ -942,8 +1086,17 @@
         <p>Management Web App</p>
       </div>
       <form id="loginForm" class="login-form">
+        <div class="form-group" style="margin-bottom:14px">
+          <label style="font-weight:600;margin-bottom:6px;display:block">
+            <i class="fas fa-envelope me-1" style="color:var(--primary)"></i>Email Address
+          </label>
+          <input type="email" id="loginEmail" placeholder="you@example.com"
+                 required autocomplete="email" class="login-email-input">
+        </div>
         <div class="form-group" style="margin-bottom:18px">
-          <label style="font-weight:600;margin-bottom:6px;display:block">Admin Password</label>
+          <label style="font-weight:600;margin-bottom:6px;display:block">
+            <i class="fas fa-lock me-1" style="color:var(--primary)"></i>Password
+          </label>
           <div class="login-password-wrap">
             <input type="password" id="loginPassword" placeholder="Enter your password"
                    required autocomplete="current-password" class="login-password-input">
@@ -954,15 +1107,311 @@
           </div>
         </div>
         <div id="loginError" class="login-error" style="display:none">
-          <i class="fas fa-exclamation-circle"></i> Incorrect password. Please try again.
+          <i class="fas fa-exclamation-circle"></i> <span id="loginErrorMsg">Invalid email or password.</span>
         </div>
-        <button type="submit" class="btn btn-primary login-submit-btn">
+        <button type="submit" id="loginSubmitBtn" class="btn btn-primary login-submit-btn">
           <i class="fas fa-right-to-bracket"></i> Sign In
         </button>
+        <div class="text-center mt-2">
+          <button type="button" class="btn btn-link btn-sm p-0" style="font-size:.8rem;color:var(--primary)"
+                  onclick="app.forgotPassword()">Forgot Password?</button>
+        </div>
       </form>
-      <div class="login-footer">TRACS APPAREL v2.0 &mdash; Secure Access</div>
+      <div class="login-footer">TRACS APPAREL v2.0 &mdash; Secured by Firebase</div>
     </div>
   </div>
+
+  <!-- ─── First-time Setup Screen ────────────────────────────────────────────── -->
+  <div class="setup-screen" id="setupScreen">
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="login-brand-icon"><i class="fas fa-user-shield"></i></div>
+        <h1>TRACS APPAREL</h1>
+        <p>First-time Admin Setup</p>
+      </div>
+      <form id="setupForm" class="login-form">
+        <div class="form-group" style="margin-bottom:14px">
+          <label style="font-weight:600;margin-bottom:6px;display:block">Admin Email *</label>
+          <input type="email" id="setupEmail" placeholder="admin@example.com"
+                 required class="login-email-input">
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label style="font-weight:600;margin-bottom:6px;display:block">Password *</label>
+          <input type="password" id="setupPassword" placeholder="Min 6 characters"
+                 required class="login-password-input">
+        </div>
+        <div class="form-group" style="margin-bottom:18px">
+          <label style="font-weight:600;margin-bottom:6px;display:block">Confirm Password *</label>
+          <input type="password" id="setupPassword2" placeholder="Repeat password"
+                 required class="login-password-input">
+        </div>
+        <div id="setupError" class="login-error" style="display:none">
+          <i class="fas fa-exclamation-circle"></i> <span></span>
+        </div>
+        <button type="submit" id="setupBtn" class="btn btn-primary login-submit-btn">
+          <i class="fas fa-user-shield me-1"></i>Create Admin Account
+        </button>
+      </form>
+      <div class="login-footer">This creates the first admin account for your system.</div>
+    </div>
+  </div>
+
+  <!-- ─── Change Password Screen ─────────────────────────────────────────────── -->
+  <div class="setup-screen" id="changePasswordScreen">
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="login-brand-icon"><i class="fas fa-key"></i></div>
+        <h1>Change Password</h1>
+        <p>You must set a new password to continue</p>
+      </div>
+      <form id="changePassForm" class="login-form">
+        <div class="form-group" style="margin-bottom:14px">
+          <label style="font-weight:600;margin-bottom:6px;display:block">New Password *</label>
+          <input type="password" id="newPassword" placeholder="Min 6 characters"
+                 required class="login-password-input">
+        </div>
+        <div class="form-group" style="margin-bottom:18px">
+          <label style="font-weight:600;margin-bottom:6px;display:block">Confirm New Password *</label>
+          <input type="password" id="newPassword2" placeholder="Repeat new password"
+                 required class="login-password-input">
+        </div>
+        <div id="changePassError" class="login-error" style="display:none">
+          <i class="fas fa-exclamation-circle"></i> <span></span>
+        </div>
+        <button type="submit" id="changePassBtn" class="btn btn-primary login-submit-btn">
+          <i class="fas fa-key me-1"></i>Set New Password
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ─── Update Production Modal (Operator) ─────────────────────────────────── -->
+  <div class="modal-overlay" id="updateProdModal" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h2><i class="fas fa-edit me-2"></i>Update Production Stage</h2>
+        <button class="modal-close" onclick="app.closeUpdateProdModal()" aria-label="Close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="opUpdateOrderId">
+        <div class="mb-3">
+          <div class="d-flex gap-3 flex-wrap">
+            <div><strong>Style:</strong> <span id="opUpdateStyle" class="text-muted">—</span></div>
+            <div><strong>Total Qty:</strong> <span id="opUpdateQty" class="text-muted">—</span></div>
+          </div>
+        </div>
+        <div id="opUpdateStepper" class="mb-3"></div>
+        <form id="updateProdForm" onsubmit="app.saveProductionUpdate(event)" novalidate>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Stage *</label>
+              <select class="form-select" id="opUpdateStage">
+                <option value="cutting">Cutting</option>
+                <option value="sewing_in">Sewing Input</option>
+                <option value="sewing_out">Sewing Output</option>
+                <option value="wash">Wash</option>
+                <option value="finishing">Finishing</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Date *</label>
+              <input type="date" class="form-control" id="opUpdateDate">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Quantity *</label>
+              <input type="number" class="form-control" id="opUpdateQtyInput" min="1" placeholder="0">
+            </div>
+          </div>
+          <div id="opUpdateError" class="login-error mt-2" style="display:none">
+            <i class="fas fa-exclamation-circle"></i> <span></span>
+          </div>
+          <div class="form-actions mt-3">
+            <button type="submit" id="opUpdateSaveBtn" class="btn btn-primary">
+              <i class="fas fa-save me-1"></i>Save Update
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="app.closeUpdateProdModal()">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Operator Shell ─────────────────────────────────────────────────────── -->
+  <div id="operatorShell">
+    <header class="op-header">
+      <div class="op-brand">
+        <i class="fas fa-industry"></i>
+        <div>TRACS APPAREL <small>Operator Panel</small></div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <span class="op-user-badge"><i class="fas fa-user-circle"></i><span id="opUserEmail"></span></span>
+        <button class="btn-op-logout" onclick="app.logout()">
+          <i class="fas fa-sign-out-alt me-1"></i>Logout
+        </button>
+      </div>
+    </header>
+
+    <nav class="op-nav">
+      <button class="op-nav-btn active" data-op-view="op-production" onclick="app.switchOpView('op-production', this)">
+        <i class="fas fa-industry"></i><span>Orders</span>
+      </button>
+      <button class="op-nav-btn" data-op-view="op-attendance" onclick="app.switchOpView('op-attendance', this)">
+        <i class="fas fa-calendar-check"></i><span>Attendance</span>
+      </button>
+      <button class="op-nav-btn" data-op-view="op-corrections" onclick="app.switchOpView('op-corrections', this)">
+        <i class="fas fa-ticket-alt"></i><span>My Corrections</span>
+      </button>
+    </nav>
+
+    <div class="op-content">
+
+      <!-- Operator Production View -->
+      <div class="op-view active" id="op-production">
+        <div class="card-panel">
+          <div class="card-panel-header">
+            <h2><i class="fas fa-industry me-2"></i>Active Production Orders</h2>
+            <input type="text" id="opProdSearch" class="form-control form-control-sm"
+                   placeholder="Search style…"
+                   oninput="app.filterOpOrders()"
+                   style="width:170px;background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3);">
+          </div>
+          <div class="card-panel-body p-0">
+            <div class="table-responsive">
+              <table class="prod-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Style / Order No</th>
+                    <th>Total Qty</th>
+                    <th>Progress</th>
+                    <th>Stage</th>
+                    <th>Update</th>
+                  </tr>
+                </thead>
+                <tbody id="opOrdersList">
+                  <tr><td colspan="6" class="text-center py-4">
+                    <div class="spinner-border text-secondary" role="status"><span class="visually-hidden">Loading…</span></div>
+                  </td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Operator Attendance View -->
+      <div class="op-view" id="op-attendance">
+        <div class="card">
+          <div class="card-header">
+            <h2><i class="fas fa-calendar-check" style="color:var(--primary);margin-right:6px"></i>
+              Today's Attendance &mdash; <span id="opAttendanceDate"></span>
+            </h2>
+          </div>
+          <p class="px-3 pt-1 text-muted" style="font-size:.82rem">
+            <i class="fas fa-info-circle me-1"></i>Working hours: 8:00 AM – 5:00 PM. You can only mark/edit today.
+          </p>
+          <div class="att-man-summary">
+            <span class="att-sum-item" style="color:#16a34a"><i class="fas fa-check-circle"></i> P: <strong id="op-att-p">0</strong></span>
+            <span class="att-sum-item" style="color:#854d0e"><i class="fas fa-clock"></i> L: <strong id="op-att-l">0</strong></span>
+            <span class="att-sum-item" style="color:#991b1b"><i class="fas fa-exclamation-triangle"></i> PL: <strong id="op-att-pl">0</strong></span>
+            <span class="att-sum-item" style="color:#475569"><i class="fas fa-times-circle"></i> A: <strong id="op-att-a">0</strong></span>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table att-daily-table">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>ID</th>
+                  <th>IN Time</th>
+                  <th>OUT Time</th>
+                  <th>Reg. Hrs</th>
+                  <th>OT Hrs</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="opAttList">
+                <tr><td colspan="8" class="empty-state">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Operator Correction Requests -->
+      <div class="op-view" id="op-corrections">
+        <div class="card">
+          <div class="card-header">
+            <h2><i class="fas fa-ticket-alt" style="color:var(--warning);margin-right:6px"></i>My Correction Requests</h2>
+            <button class="btn btn-primary btn-sm" onclick="app.openCorrectionRequestModal()">
+              <i class="fas fa-plus me-1"></i>New Request
+            </button>
+          </div>
+          <div class="p-3" id="opCorrectionList">
+            <div class="text-center py-4 text-muted">
+              <i class="fas fa-ticket-alt fa-2x mb-2 d-block opacity-25"></i>No requests yet.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /op-content -->
+  </div><!-- /operatorShell -->
+
+  <!-- ─── Correction Request Modal (Operator) ────────────────────────────────── -->
+  <div class="modal-overlay" id="correctionRequestModal" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h2><i class="fas fa-ticket-alt me-2"></i>Submit Correction Request</h2>
+        <button class="modal-close" onclick="app.closeCorrectionRequestModal()" aria-label="Close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="correctionRequestForm" onsubmit="app.submitCorrectionRequest(event)" novalidate>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Date *</label>
+              <input type="date" class="form-control" id="cr-date" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Employee *</label>
+              <select class="form-select" id="cr-empId" required>
+                <option value="">— Select —</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Correct IN Time</label>
+              <input type="time" class="form-control" id="cr-inTime">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Correct OUT Time</label>
+              <input type="time" class="form-control" id="cr-outTime">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Reason *</label>
+              <textarea class="form-control" id="cr-reason" rows="3"
+                        placeholder="Describe the mistake and correct information…" required></textarea>
+            </div>
+          </div>
+          <div id="crError" class="login-error mt-2" style="display:none">
+            <i class="fas fa-exclamation-circle"></i> <span></span>
+          </div>
+          <div class="form-actions mt-3">
+            <button type="submit" id="crSubmitBtn" class="btn btn-primary">
+              <i class="fas fa-paper-plane me-1"></i>Submit Request
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="app.closeCorrectionRequestModal()">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Operator Toast Container -->
+  <div id="opToastContainer"></div>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
@@ -974,388 +1423,7 @@
           crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script type="module" src="app.js"></script>
 
-  <!-- ── Production Tracking Module ──────────────────────────────────────── -->
-  <script type="module">
-    import { getApp }
-      from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-    import {
-      getAuth,
-      signInWithEmailAndPassword,
-      signOut,
-      onAuthStateChanged,
-    } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-    import {
-      getDatabase,
-      ref,
-      push,
-      set,
-      remove,
-      onValue,
-    } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
-
-    const app  = getApp();
-    const auth = getAuth(app);
-    const db   = getDatabase(app);
-
-    const PROD_PATH = 'tracsApparelData/production';
-
-    let records = {};
-
-    // ── Utilities ─────────────────────────────────────────────────────────────
-
-    function prodToast(msg, type = 'info') {
-      const el = document.createElement('div');
-      el.className = `toast-msg ${type}`;
-      el.textContent = msg;
-      document.getElementById('prod-toastContainer').appendChild(el);
-      setTimeout(() => el.remove(), 3500);
-    }
-
-    function daysBetween(dateStr1, dateStr2) {
-      if (!dateStr1 || !dateStr2) return null;
-      return Math.round((new Date(dateStr2) - new Date(dateStr1)) / 86400000);
-    }
-
-    function hasDelay(rec) {
-      if (rec.cuttingDate && rec.sewingDate) {
-        const d = daysBetween(rec.cuttingDate, rec.sewingDate);
-        if (d !== null && d > 3) return true;
-      }
-      if (rec.sewingDate && rec.washingDate) {
-        const d = daysBetween(rec.sewingDate, rec.washingDate);
-        if (d !== null && d > 3) return true;
-      }
-      const today = new Date().toISOString().slice(0, 10);
-      if (rec.cuttingDate && !rec.sewingDate) {
-        const d = daysBetween(rec.cuttingDate, today);
-        if (d !== null && d > 3) return true;
-      }
-      if (rec.sewingDate && !rec.washingDate) {
-        const d = daysBetween(rec.sewingDate, today);
-        if (d !== null && d > 3) return true;
-      }
-      return false;
-    }
-
-    function deriveStage(rec) {
-      if (rec.washingQty > 0) return { label: 'Complete',  cls: 'complete' };
-      if (rec.washingDate)    return { label: 'Washing',   cls: 'washing'  };
-      if (rec.sewingQty > 0)  return { label: 'Sewing',    cls: 'sewing'   };
-      if (rec.cuttingDate)    return { label: 'Cutting',   cls: 'cutting'  };
-      return { label: 'Pending', cls: 'cutting' };
-    }
-
-    function fmtDate(s) {
-      if (!s) return '—';
-      const [y, m, d] = s.split('-');
-      return `${d}/${m}/${y}`;
-    }
-
-    function fmtN(n) { return n != null && n !== '' ? Number(n).toLocaleString() : '—'; }
-
-    function escHtml(s) {
-      return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    }
-
-    // ── Render ─────────────────────────────────────────────────────────────────
-
-    function renderTable() {
-      const q     = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
-      const tbody = document.getElementById('prodTbody');
-      const list  = Object.entries(records)
-        .map(([id, r]) => ({ id, ...r }))
-        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-      const filtered = q
-        ? list.filter(r => (r.buyerName || '').toLowerCase().includes(q)
-                        || (r.styleNo   || '').toLowerCase().includes(q))
-        : list;
-
-      if (!filtered.length) {
-        tbody.innerHTML = `
-          <tr><td colspan="13">
-            <div class="prod-empty-state">
-              <i class="fas fa-inbox"></i>
-              No production records found.
-            </div>
-          </td></tr>`;
-        return;
-      }
-
-      tbody.innerHTML = filtered.map((rec, idx) => {
-        const wip     = ((rec.cuttingQty || 0) - (rec.sewingQty || 0));
-        const stage   = deriveStage(rec);
-        const delayed = hasDelay(rec);
-
-        return `
-          <tr class="${delayed ? 'delay-alert' : ''}" data-id="${rec.id}">
-            <td>${idx + 1}</td>
-            <td><strong>${escHtml(rec.buyerName || '')}</strong>
-                ${delayed ? `<br><span class="delay-badge"><i class="fas fa-exclamation-triangle"></i> Delayed</span>` : ''}
-            </td>
-            <td>${escHtml(rec.styleNo || '')}</td>
-            <td>${fmtN(rec.totalQty)}</td>
-            <td>${fmtDate(rec.cuttingDate)}</td>
-            <td>${fmtN(rec.cuttingQty)}</td>
-            <td>${fmtDate(rec.sewingDate)}</td>
-            <td>${fmtN(rec.sewingQty)}</td>
-            <td><span class="wip-badge">${wip > 0 ? fmtN(wip) : '—'}</span></td>
-            <td>${fmtDate(rec.washingDate)}</td>
-            <td>${fmtN(rec.washingQty)}</td>
-            <td><span class="stage-chip ${stage.cls}">${stage.label}</span></td>
-            <td>
-              <div class="d-flex gap-1">
-                <button class="btn-outline-teal" style="padding:.25rem .6rem;font-size:.75rem"
-                        onclick="prodApp.editOrder('${rec.id}')" title="Edit">
-                  <i class="fas fa-pencil-alt"></i>
-                </button>
-                <button class="btn-outline-teal" style="padding:.25rem .6rem;font-size:.75rem;border-color:#6c757d;color:#6c757d"
-                        onclick="prodApp.downloadPDF('${rec.id}')" title="Download PDF">
-                  <i class="fas fa-file-pdf"></i>
-                </button>
-                <button class="btn-outline-teal" style="padding:.25rem .6rem;font-size:.75rem;border-color:var(--danger);color:var(--danger)"
-                        onclick="prodApp.deleteOrder('${rec.id}')" title="Delete">
-                  <i class="fas fa-trash-alt"></i>
-                </button>
-              </div>
-            </td>
-          </tr>`;
-      }).join('');
-    }
-
-    // ── Firebase listener ──────────────────────────────────────────────────────
-
-    function startListening() {
-      onValue(ref(db, PROD_PATH), snap => {
-        records = snap.exists() ? snap.val() : {};
-        renderTable();
-      });
-    }
-
-    // ── prodApp public API ─────────────────────────────────────────────────────
-
-    window.prodApp = {
-
-      async login() {
-        const email  = document.getElementById('prod-loginEmail').value.trim();
-        const password = document.getElementById('prod-loginPassword').value;
-        const errBox = document.getElementById('prod-loginError');
-        const errMsg = document.getElementById('prod-loginErrorMsg');
-        const btn    = document.getElementById('prod-loginBtn');
-
-        errBox.style.display = 'none';
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Signing in…';
-
-        try {
-          await signInWithEmailAndPassword(auth, email, password);
-        } catch (err) {
-          let msg = 'Login failed. Please check your credentials.';
-          if (['auth/user-not-found', 'auth/wrong-password', 'auth/invalid-credential'].includes(err.code)) {
-            msg = 'Invalid email or password.';
-          } else if (err.code === 'auth/too-many-requests') {
-            msg = 'Too many failed attempts. Please try again later.';
-          } else if (err.code === 'auth/network-request-failed') {
-            msg = 'Network error. Check your internet connection.';
-          }
-          errMsg.textContent = msg;
-          errBox.style.display = 'block';
-        } finally {
-          btn.disabled = false;
-          btn.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>Sign In';
-        }
-      },
-
-      async logout() {
-        await signOut(auth);
-      },
-
-      async saveOrder(e) {
-        e.preventDefault();
-
-        const buyerName   = document.getElementById('buyerName').value.trim();
-        const styleNo     = document.getElementById('styleNo').value.trim();
-        const totalQty    = parseInt(document.getElementById('totalQty').value) || 0;
-        const cuttingDate = document.getElementById('cuttingDate').value;
-        const cuttingQty  = parseInt(document.getElementById('cuttingQty').value) || 0;
-        const sewingDate  = document.getElementById('sewingDate').value;
-        const sewingQty   = parseInt(document.getElementById('sewingQty').value) || 0;
-        const washingDate = document.getElementById('washingDate').value;
-        const washingQty  = parseInt(document.getElementById('washingQty').value) || 0;
-        const editId      = document.getElementById('editOrderId').value;
-
-        if (!buyerName || !styleNo || !totalQty) {
-          prodToast('Buyer Name, Style/Order No and Total Quantity are required.', 'error');
-          return;
-        }
-
-        const payload = {
-          buyerName, styleNo, totalQty,
-          cuttingDate, cuttingQty,
-          sewingDate,  sewingQty,
-          washingDate, washingQty,
-          updatedAt: Date.now(),
-        };
-
-        try {
-          if (editId) {
-            await set(ref(db, `${PROD_PATH}/${editId}`), { ...payload, createdAt: records[editId]?.createdAt || Date.now() });
-            prodToast('Order updated successfully.', 'success');
-          } else {
-            payload.createdAt = Date.now();
-            await push(ref(db, PROD_PATH), payload);
-            prodToast('Order added successfully.', 'success');
-          }
-          this.cancelEdit();
-        } catch (err) {
-          console.error(err);
-          prodToast('Failed to save order. Check permissions.', 'error');
-        }
-      },
-
-      editOrder(id) {
-        const rec = records[id];
-        if (!rec) return;
-        document.getElementById('editOrderId').value  = id;
-        document.getElementById('buyerName').value    = rec.buyerName   || '';
-        document.getElementById('styleNo').value      = rec.styleNo     || '';
-        document.getElementById('totalQty').value     = rec.totalQty    || '';
-        document.getElementById('cuttingDate').value  = rec.cuttingDate || '';
-        document.getElementById('cuttingQty').value   = rec.cuttingQty  || 0;
-        document.getElementById('sewingDate').value   = rec.sewingDate  || '';
-        document.getElementById('sewingQty').value    = rec.sewingQty   || 0;
-        document.getElementById('washingDate').value  = rec.washingDate || '';
-        document.getElementById('washingQty').value   = rec.washingQty  || 0;
-        document.getElementById('orderForm').scrollIntoView({ behavior: 'smooth' });
-        prodToast('Record loaded for editing.', 'info');
-      },
-
-      cancelEdit() {
-        document.getElementById('editOrderId').value = '';
-        document.getElementById('orderForm').reset();
-      },
-
-      async deleteOrder(id) {
-        if (!confirm('Delete this production record?')) return;
-        try {
-          await remove(ref(db, `${PROD_PATH}/${id}`));
-          prodToast('Record deleted.', 'info');
-        } catch (err) {
-          console.error(err);
-          prodToast('Failed to delete record.', 'error');
-        }
-      },
-
-      downloadPDF(id) {
-        const rec = records[id];
-        if (!rec) return;
-
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-
-        doc.setFillColor(10, 36, 66);
-        doc.rect(0, 0, 595, 70, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(18);
-        doc.setFont('helvetica', 'bold');
-        doc.text('TRACS APPAREL', 40, 32);
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'normal');
-        doc.text('Production Status Report', 40, 50);
-        doc.setFontSize(9);
-        doc.text(`Generated: ${new Date().toLocaleString()}`, 40, 64);
-
-        doc.setTextColor(30, 41, 59);
-        doc.setFontSize(13);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`Buyer: ${rec.buyerName}`, 40, 95);
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Style / Order No: ${rec.styleNo}`, 40, 113);
-        doc.text(`Total Quantity: ${Number(rec.totalQty).toLocaleString()}`, 40, 128);
-
-        const wip     = (rec.cuttingQty || 0) - (rec.sewingQty || 0);
-        const stage   = deriveStage(rec);
-        const delayed = hasDelay(rec);
-        doc.text(`Current Stage: ${stage.label}${delayed ? '  ⚠ DELAYED' : ''}`, 40, 143);
-
-        doc.autoTable({
-          startY: 162,
-          head: [['Stage', 'Date', 'Quantity', 'Notes']],
-          body: [
-            ['Cutting',        fmtDate(rec.cuttingDate), fmtN(rec.cuttingQty), ''],
-            ['Sewing (Swing)', fmtDate(rec.sewingDate),  fmtN(rec.sewingQty),  `WIP: ${wip > 0 ? fmtN(wip) : '—'}`],
-            ['Washing',        fmtDate(rec.washingDate), fmtN(rec.washingQty), ''],
-          ],
-          headStyles: { fillColor: [13, 115, 119], textColor: [255, 255, 255], fontStyle: 'bold' },
-          alternateRowStyles: { fillColor: [238, 248, 249] },
-          styles: { fontSize: 10, cellPadding: 8 },
-          columnStyles: { 3: { cellWidth: 120 } },
-        });
-
-        if (delayed) {
-          const yAfterTable = doc.lastAutoTable.finalY + 16;
-          doc.setTextColor(231, 76, 60);
-          doc.setFontSize(10);
-          doc.setFont('helvetica', 'bold');
-          doc.text('⚠  DELAY ALERT: One or more stages exceeded 3 days.', 40, yAfterTable);
-        }
-
-        const pageH = doc.internal.pageSize.getHeight();
-        doc.setTextColor(100, 116, 139);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.text('TRACS APPAREL — Confidential Production Report', 40, pageH - 20);
-
-        const safeStyle = (rec.styleNo || 'order').replace(/[^a-z0-9]/gi, '_');
-        doc.save(`Production_${rec.buyerName}_${safeStyle}.pdf`);
-        prodToast('PDF downloaded.', 'success');
-      },
-
-      renderTable,
-    };
-
-    // ── Auth state ─────────────────────────────────────────────────────────────
-
-    onAuthStateChanged(auth, user => {
-      const loginScreen = document.getElementById('prod-loginScreen');
-      const appShell    = document.getElementById('prod-appShell');
-      if (!loginScreen || !appShell) return;
-
-      if (user) {
-        loginScreen.style.display = 'none';
-        appShell.style.display = 'flex';
-        appShell.style.flexDirection = 'column';
-        document.getElementById('prod-headerUserEmail').textContent = user.email;
-        startListening();
-      } else {
-        loginScreen.style.display = 'flex';
-        appShell.style.display = 'none';
-        records = {};
-        const tbody = document.getElementById('prodTbody');
-        if (tbody) {
-          tbody.innerHTML = `
-            <tr><td colspan="13">
-              <div class="spinner-wrap">
-                <div class="spinner-border text-secondary" role="status">
-                  <span class="visually-hidden">Loading…</span>
-                </div>
-              </div>
-            </td></tr>`;
-        }
-      }
-    });
-
-    document.getElementById('prod-loginPassword').addEventListener('keydown', e => {
-      if (e.key === 'Enter') prodApp.login();
-    });
-  </script>
-
-  <!-- Bootstrap 5 JS (required for spinner and Bootstrap components) -->
+  <!-- Bootstrap 5 JS (needed for any Bootstrap widgets) -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
           crossorigin="anonymous"></script>
 </body>

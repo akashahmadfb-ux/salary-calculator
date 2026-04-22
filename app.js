@@ -44,8 +44,25 @@ const DATA_PATH = 'tracsApparelData/shared';
 const PROD_PATH = 'tracsApparelData/production';
 const USERS_PATH = 'users';
 const ACTIVITY_PATH = 'activity_logs';
+const ATTENDANCE_PATH = 'attendance';
+const CORRECTION_PATH = 'correction_requests';
+
+// Working hour constants
+const WORK_START_H = 8, WORK_START_M = 0;   // 08:00
+const WORK_END_H   = 17, WORK_END_M = 0;     // 17:00
+const LATE_MAX_H   = 8, LATE_MAX_M = 15;     // 08:15 — PL threshold
+
+// Production stages definition
+const PROD_STAGES = [
+  { key: 'cutting',    label: 'Cutting',      dateField: 'cuttingDate',    qtyField: 'cuttingQty'    },
+  { key: 'sewing_in',  label: 'Sewing In',    dateField: 'sewingInDate',   qtyField: 'sewingInQty'   },
+  { key: 'sewing_out', label: 'Sewing Out',   dateField: 'sewingOutDate',  qtyField: 'sewingOutQty'  },
+  { key: 'wash',       label: 'Wash',         dateField: 'washDate',       qtyField: 'washQty'       },
+  { key: 'finishing',  label: 'Finishing',    dateField: 'finishingDate',  qtyField: 'finishingQty'  },
+];
 
 let dataCache = defaultData();
+let prodRecords = {};   // live production records cache
 
 function defaultData() {
   return { companyName: 'TRACS APPAREL', employees: [], salaryRecords: [], attendance: {} };
@@ -446,16 +463,17 @@ const app = {
     if (el) el.classList.add('active');
 
     const titles = {
-      dashboard:          'Dashboard',
-      employees:          'Employees',
-      'salary-entry':     'Salary Entry',
-      attendance:         'Attendance',
-      history:            'History',
-      'monthly-summary':  'Monthly Summary',
-      'payroll-reports':  'Payroll Reports',
-      production:         'Production Tracking',
-      'settings-users':   'Settings › Users',
-      'settings-activity':'Settings › Activity Log',
+      dashboard:            'Dashboard',
+      employees:            'Employees',
+      'salary-entry':       'Salary Entry',
+      attendance:           'Attendance',
+      history:              'History',
+      'monthly-summary':    'Monthly Summary',
+      'payroll-reports':    'Payroll Reports',
+      production:           'Production Tracking',
+      'correction-admin':   'Correction Requests',
+      'settings-users':     'Settings › Users',
+      'settings-activity':  'Settings › Activity Log',
     };
     document.getElementById('pageTitle').textContent = titles[view] || view;
 
@@ -469,6 +487,8 @@ const app = {
     if (view === 'history')            this.renderHistory();
     if (view === 'monthly-summary')    { /* user clicks Load */ }
     if (view === 'payroll-reports')    this.renderPayrollReports();
+    if (view === 'production')         this.initProductionView();
+    if (view === 'correction-admin')   this.loadCorrectionRequestsAdmin();
     if (view === 'settings-users')     this.loadUsersPage();
     if (view === 'settings-activity')  this.loadActivityLog();
   },
@@ -1090,96 +1110,255 @@ const app = {
     document.getElementById('attendanceModal').classList.remove('show');
   },
 
-  // ── Attendance Management View ───────────────────────────────────────────────
+  // ── Attendance Management View (IN/OUT Tracking) ─────────────────────────────
 
   renderAttendanceManagement() {
-    const data = loadData();
-    const monthInput = document.getElementById('att-man-month');
-    const dateInput  = document.getElementById('att-man-date');
-    if (!monthInput || !dateInput) return;
-
-    if (!monthInput.value) {
-      const now = new Date();
-      monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    }
-
-    const activeMonth = monthInput.value;
-    if (!dateInput.value || monthFromDate(dateInput.value) !== activeMonth) {
-      dateInput.value = `${activeMonth}-01`;
-    }
+    const dateInput = document.getElementById('att-man-date');
+    const now = new Date();
+    const today = formatAsYYYYMMDD(now);
+    if (!dateInput) return;
+    if (!dateInput.value) dateInput.value = today;
     this._attMgmtDate = dateInput.value;
-    this._renderAttendanceManagementRows(data);
-  },
 
-  onAttendanceMonthChange() {
-    const month = document.getElementById('att-man-month').value;
-    const dateEl = document.getElementById('att-man-date');
-    if (!month || !dateEl) return;
-    const days = getDaysInMonth(month);
-    let day = dayFromDate(dateEl.value) || 1;
-    day = Math.min(Math.max(day, 1), days);
-    dateEl.value = `${month}-${String(day).padStart(2, '0')}`;
-    this._attMgmtDate = dateEl.value;
-    this.renderAttendanceManagement();
+    // Initialise PL month picker
+    const plMonthEl = document.getElementById('att-pl-month');
+    if (plMonthEl && !plMonthEl.value) {
+      plMonthEl.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    this._renderDailyAttendanceRows(this._attMgmtDate, 'admin');
+    if (plMonthEl && plMonthEl.value) this.renderPLSummary();
   },
 
   onAttendanceDateChange() {
-    const dateEl  = document.getElementById('att-man-date');
-    const monthEl = document.getElementById('att-man-month');
-    if (!dateEl || !monthEl || !dateEl.value) return;
-    monthEl.value = monthFromDate(dateEl.value);
+    const dateEl = document.getElementById('att-man-date');
+    if (!dateEl || !dateEl.value) return;
     this._attMgmtDate = dateEl.value;
-    this.renderAttendanceManagement();
+    this._renderDailyAttendanceRows(this._attMgmtDate, 'admin');
   },
 
-  _renderAttendanceManagementRows(data) {
-    const dateStr = this._attMgmtDate || document.getElementById('att-man-date').value;
-    const tbody = document.getElementById('attendance-list-tbody');
+  // ── Shared daily attendance renderer ─────────────────────────────────────────
+
+  async _renderDailyAttendanceRows(dateStr, mode) {
+    // mode = 'admin' | 'operator'
+    const tbodyId = mode === 'operator' ? 'opAttList' : 'attendance-list-tbody';
+    const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
 
+    const data = loadData();
     if (!data.employees.length) {
-      tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No employees found</td></tr>';
-      document.getElementById('att-man-p').textContent = '0';
-      document.getElementById('att-man-a').textContent = '0';
-      document.getElementById('att-man-h').textContent = '0';
+      tbody.innerHTML = `<tr><td colspan="8" class="empty-state">No employees found</td></tr>`;
+      this._updateAttSummaryCounters([], mode);
       return;
     }
 
-    let p = 0, a = 0, h = 0;
-    tbody.innerHTML = data.employees.map(emp => {
-      const status = getAttendanceStatus(data, emp.id, dateStr);
-      if (status === 'A') a++;
-      else if (status === 'H') h++;
-      else p++;
+    // Fetch this date's attendance from Firebase
+    const snap = await get(ref(database, `${ATTENDANCE_PATH}/${dateStr}`));
+    const attDay = snap.exists() ? snap.val() : {};
+
+    const today = formatAsYYYYMMDD(new Date());
+    const isToday = dateStr === today;
+    const isAdmin = mode === 'admin';
+
+    const rows = data.employees.map(emp => {
+      const rec = attDay[emp.id] || {};
+      const inTime  = rec.in_time  || '';
+      const outTime = rec.out_time || '';
+      const status  = rec.status   || 'A';
+      const regHrs  = typeof rec.reg_hours === 'number' ? rec.reg_hours.toFixed(2) : '—';
+      const otHrs   = typeof rec.ot_hours === 'number' ? rec.ot_hours.toFixed(2) : '—';
+
+      // Can edit if admin OR (operator AND today)
+      const canEdit = isAdmin || isToday;
+      const hasIn  = !!inTime;
+      const hasOut = !!outTime;
+
+      const statusBadge = `<span class="att-status-badge att-badge-${status}">${status}</span>`;
+
+      const inBtn  = hasIn
+        ? `<span style="font-weight:600;color:#16a34a">${inTime}</span>`
+        : (canEdit ? `<button class="btn-mark-in" onclick="app.markAttendance('${esc(emp.id)}','${dateStr}','in','${mode}')"><i class="fas fa-sign-in-alt me-1"></i>Mark IN</button>` : '—');
+
+      const outBtn = hasIn && !hasOut
+        ? (canEdit ? `<button class="btn-mark-out" onclick="app.markAttendance('${esc(emp.id)}','${dateStr}','out','${mode}')"><i class="fas fa-sign-out-alt me-1"></i>Mark OUT</button>` : '—')
+        : (hasOut ? `<span style="font-weight:600;color:#dc2626">${outTime}</span>` : '—');
+
+      const adminEditBtn = isAdmin
+        ? `<button class="icon-btn edit ms-1" title="Edit" onclick="app.openEditAttendance('${esc(emp.id)}','${dateStr}')"><i class="fas fa-edit"></i></button>`
+        : '';
+
       return `<tr>
         <td>${esc(emp.name)}</td>
         <td>${esc(emp.id)}</td>
-        <td>
-          <select class="att-status-select" onchange="app.setAttendanceForDate('${esc(emp.id)}', this.value)">
-            <option value="P" ${status === 'P' ? 'selected' : ''}>Present</option>
-            <option value="A" ${status === 'A' ? 'selected' : ''}>Absent</option>
-            <option value="H" ${status === 'H' ? 'selected' : ''}>Company Holiday</option>
-          </select>
-        </td>
+        <td>${inBtn}</td>
+        <td>${outBtn}</td>
+        <td>${regHrs}</td>
+        <td>${otHrs}</td>
+        <td>${statusBadge}</td>
+        <td>${adminEditBtn}</td>
       </tr>`;
-    }).join('');
+    });
 
-    document.getElementById('att-man-p').textContent = p;
-    document.getElementById('att-man-a').textContent = a;
-    document.getElementById('att-man-h').textContent = h;
+    tbody.innerHTML = rows.join('');
+    this._updateAttSummaryCounters(data.employees.map(e => (attDay[e.id] || {}).status || 'A'), mode);
   },
 
-  async setAttendanceForDate(empId, status) {
+  _updateAttSummaryCounters(statuses, mode) {
+    const prefix = mode === 'operator' ? 'op-att' : 'att-man';
+    let p = 0, l = 0, pl = 0, a = 0, h = 0;
+    statuses.forEach(s => {
+      if (s === 'P') p++;
+      else if (s === 'L') l++;
+      else if (s === 'PL') pl++;
+      else if (s === 'A') a++;
+      else if (s === 'H') h++;
+    });
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    set(`${prefix}-p`, p);
+    set(`${prefix}-l`, l);
+    set(`${prefix}-pl`, pl);
+    set(`${prefix}-a`, a);
+    if (mode === 'admin') set('att-man-h', h);
+  },
+
+  // ── Mark IN / OUT ─────────────────────────────────────────────────────────────
+
+  async markAttendance(empId, dateStr, type, mode) {
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+    try {
+      const snap = await get(ref(database, `${ATTENDANCE_PATH}/${dateStr}/${empId}`));
+      const existing = snap.exists() ? snap.val() : {};
+
+      if (type === 'in') {
+        const inStatus = this._calcInStatus(timeStr);
+        const updates = {
+          in_time: timeStr,
+          status: inStatus,
+          out_time: existing.out_time || '',
+          reg_hours: existing.reg_hours || 0,
+          ot_hours: existing.ot_hours || 0,
+          empId,
+        };
+        await set(ref(database, `${ATTENDANCE_PATH}/${dateStr}/${empId}`), updates);
+      } else {
+        // Mark OUT
+        const inTime  = existing.in_time || '';
+        const { regHrs, otHrs } = this._calcHours(inTime, timeStr);
+        await update(ref(database, `${ATTENDANCE_PATH}/${dateStr}/${empId}`), {
+          out_time: timeStr,
+          reg_hours: regHrs,
+          ot_hours: otHrs,
+        });
+      }
+
+      this._renderDailyAttendanceRows(dateStr, mode);
+      showToast(`${type === 'in' ? 'IN' : 'OUT'} marked for ${empId}.`, 'success');
+    } catch (err) {
+      console.error('markAttendance failed:', err);
+      showToast('Failed to mark attendance.', 'error');
+    }
+  },
+
+  // ── Calculate IN status (P / L / PL) ─────────────────────────────────────────
+
+  _calcInStatus(timeStr) {
+    if (!timeStr) return 'A';
+    const [h, m] = timeStr.split(':').map(Number);
+    const mins = h * 60 + m;
+    const workStart  = WORK_START_H * 60 + WORK_START_M;  // 480 mins = 8:00
+    const lateLimit  = 8 * 60 + 5;                        // 485 mins = 8:05
+    const penaltyLim = LATE_MAX_H * 60 + LATE_MAX_M;      // 495 mins = 8:15
+    if (mins <= lateLimit)  return 'P';
+    if (mins <= penaltyLim) return 'L';
+    return 'PL';
+  },
+
+  // ── Calculate reg/OT hours ────────────────────────────────────────────────────
+
+  _calcHours(inTimeStr, outTimeStr) {
+    if (!inTimeStr || !outTimeStr) return { regHrs: 0, otHrs: 0 };
+    const toMins = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+    const inMins  = toMins(inTimeStr);
+    const outMins = toMins(outTimeStr);
+    const workEnd = WORK_END_H * 60 + WORK_END_M; // 1020 mins = 17:00
+    const totalMins = Math.max(0, outMins - inMins);
+    const regMins   = Math.min(totalMins, Math.max(0, workEnd - inMins));
+    const otMins    = outMins > workEnd ? outMins - workEnd : 0;
+    return {
+      regHrs: parseFloat((regMins / 60).toFixed(2)),
+      otHrs:  parseFloat((otMins  / 60).toFixed(2)),
+    };
+  },
+
+  // ── Admin Edit Attendance ────────────────────────────────────────────────────
+
+  async openEditAttendance(empId, dateStr) {
+    const snap = await get(ref(database, `${ATTENDANCE_PATH}/${dateStr}/${empId}`));
+    const rec = snap.exists() ? snap.val() : {};
+    const inTime  = prompt(`Edit IN time for ${empId} on ${dateStr} (HH:MM):`, rec.in_time  || '');
+    if (inTime === null) return;
+    const outTime = prompt(`Edit OUT time for ${empId} on ${dateStr} (HH:MM):`, rec.out_time || '');
+    if (outTime === null) return;
+
+    const inStatus = this._calcInStatus(inTime);
+    const { regHrs, otHrs } = this._calcHours(inTime, outTime);
+    try {
+      await set(ref(database, `${ATTENDANCE_PATH}/${dateStr}/${empId}`), {
+        in_time:   inTime,
+        out_time:  outTime,
+        reg_hours: regHrs,
+        ot_hours:  otHrs,
+        status:    inStatus,
+        empId,
+      });
+      this._renderDailyAttendanceRows(dateStr, 'admin');
+      showToast('Attendance updated.', 'success');
+    } catch (err) {
+      showToast('Failed to update attendance.', 'error');
+    }
+  },
+
+  // ── PL Penalty Summary ────────────────────────────────────────────────────────
+
+  async renderPLSummary() {
+    const monthEl = document.getElementById('att-pl-month');
+    if (!monthEl || !monthEl.value) return;
+    const month = monthEl.value;
+    const [y, m] = month.split('-').map(Number);
+    const daysInMonth = getDaysInMonth(month);
     const data = loadData();
-    const dateStr = document.getElementById('att-man-date').value;
-    setAttendanceStatus(data, empId, dateStr, status);
-    await saveData(data);
-    this._attMgmtDate = dateStr;
-    this._renderAttendanceManagementRows(data);
-    this._syncAbsentDays();
-    this.calcPreview();
-    this.renderDashboard();
-    this.renderPayrollReports();
+    const tbody = document.getElementById('att-pl-tbody');
+    if (!tbody) return;
+
+    // Fetch all attendance for this month from Firebase
+    const rows = [];
+    for (const emp of data.employees) {
+      let plCount = 0;
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${month}-${String(d).padStart(2, '0')}`;
+        const snap = await get(ref(database, `${ATTENDANCE_PATH}/${dateStr}/${emp.id}`));
+        if (snap.exists()) {
+          const rec = snap.val();
+          if (rec.status === 'PL') plCount++;
+        }
+      }
+      const deducted = Math.floor(plCount / 3);
+      rows.push({ emp, plCount, deducted });
+    }
+
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No employees</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r => `<tr>
+      <td>${esc(r.emp.name)}</td>
+      <td>${esc(r.emp.id)}</td>
+      <td>${r.plCount > 0 ? `<span class="att-status-badge att-badge-PL">${r.plCount}</span>` : '0'}</td>
+      <td>${r.deducted > 0 ? `<span style="color:var(--danger);font-weight:600">${r.deducted}</span>` : '0'}</td>
+      <td>${daysInMonth - r.deducted}</td>
+    </tr>`).join('');
   },
 
   // ── Payroll Reports ──────────────────────────────────────────────────────────

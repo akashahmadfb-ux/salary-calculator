@@ -1108,3 +1108,365 @@ body {
 @media (max-width: 420px) {
   .login-card { padding: 28px 20px 24px; }
 }
+
+/* ─── Login Email Field ─────────────────────────────────────────────────────── */
+
+.login-email-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.login-email-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(13,115,119,.12);
+}
+
+/* ─── Setup & Change-Password Screens ────────────────────────────────────────── */
+
+.setup-screen {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: linear-gradient(135deg, #0a2342 0%, #0d7377 60%, #14a085 100%);
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.setup-screen.show { display: flex; }
+
+/* ─── Operator Shell ─────────────────────────────────────────────────────────── */
+
+#operatorShell {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  flex-direction: column;
+  background: var(--bg);
+  overflow-y: auto;
+}
+
+.op-header {
+  background: var(--sidebar-bg);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  height: 60px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  flex-shrink: 0;
+}
+
+.op-brand { display: flex; align-items: center; gap: 10px; font-size: 1rem; font-weight: 700; }
+.op-brand i { color: var(--accent); font-size: 1.3rem; }
+.op-brand small { font-weight: 400; color: rgba(255,255,255,.55); font-size: .72rem; letter-spacing: .8px; text-transform: uppercase; display: block; }
+
+.op-nav {
+  background: var(--sidebar-bg);
+  border-bottom: 2px solid rgba(255,255,255,.1);
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  gap: .25rem;
+  flex-shrink: 0;
+}
+
+.op-nav-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,.7);
+  padding: .75rem 1.25rem;
+  font-size: .875rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all .15s;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.op-nav-btn:hover { color: #fff; background: rgba(255,255,255,.07); }
+.op-nav-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.op-content { padding: 1.5rem; flex: 1; }
+
+.op-view { display: none; }
+.op-view.active { display: block; }
+
+.op-user-badge {
+  background: rgba(255,255,255,.12);
+  border-radius: 20px;
+  padding: .3rem .8rem;
+  font-size: .8rem;
+  color: rgba(255,255,255,.85);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.op-user-badge i { color: var(--accent); }
+
+.btn-op-logout {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.35);
+  color: rgba(255,255,255,.85);
+  padding: .3rem .8rem;
+  border-radius: 20px;
+  font-size: .8rem;
+  cursor: pointer;
+  transition: background .2s;
+  font-family: inherit;
+}
+
+.btn-op-logout:hover { background: rgba(255,255,255,.15); }
+
+/* ─── Progress Stepper ───────────────────────────────────────────────────────── */
+
+.prod-stepper {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  padding: .75rem 0;
+  overflow-x: auto;
+}
+
+.step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 80px;
+  position: relative;
+}
+
+.step-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  width: 100%;
+  height: 3px;
+  background: var(--border);
+  z-index: 0;
+}
+
+.step-item.done:not(:last-child)::after { background: var(--success); }
+
+.step-circle {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  background: var(--card-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  z-index: 1;
+  position: relative;
+  transition: all .2s;
+}
+
+.step-item.done   .step-circle { background: var(--success); border-color: var(--success); color: #fff; }
+.step-item.active .step-circle { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: 0 0 0 4px rgba(13,115,119,.2); }
+
+.step-label {
+  font-size: .65rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-top: .35rem;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  line-height: 1.2;
+}
+
+.step-item.done   .step-label { color: var(--success); }
+.step-item.active .step-label { color: var(--primary); }
+
+.step-qty {
+  font-size: .7rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.step-item.done   .step-qty { color: var(--success); font-weight: 600; }
+.step-item.active .step-qty { color: var(--primary); font-weight: 600; }
+
+/* ─── Attendance IN/OUT Styles ───────────────────────────────────────────────── */
+
+.att-daily-table { font-size: .82rem; }
+
+.att-daily-table th { background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: #fff; padding: .65rem .75rem; font-weight: 600; }
+.att-daily-table td { padding: .55rem .75rem; vertical-align: middle; border-bottom: 1px solid var(--border); }
+.att-daily-table tr:hover td { background: #f0fbfc; }
+
+.btn-mark-in {
+  background: linear-gradient(135deg, #16a34a, #22c55e);
+  border: none;
+  color: #fff;
+  padding: .3rem .75rem;
+  border-radius: 6px;
+  font-size: .78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s;
+  font-family: inherit;
+}
+.btn-mark-in:hover { opacity: .85; }
+.btn-mark-in:disabled { opacity: .45; cursor: not-allowed; }
+
+.btn-mark-out {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+  border: none;
+  color: #fff;
+  padding: .3rem .75rem;
+  border-radius: 6px;
+  font-size: .78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s;
+  font-family: inherit;
+}
+.btn-mark-out:hover { opacity: .85; }
+.btn-mark-out:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ─── Late Penalty Badges ─────────────────────────────────────────────────────── */
+
+.att-status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .4px;
+}
+
+.att-badge-P  { background: #dcfce7; color: #166534; }
+.att-badge-L  { background: #fef9c3; color: #854d0e; }
+.att-badge-PL { background: #fee2e2; color: #991b1b; }
+.att-badge-A  { background: #f1f5f9; color: #475569; }
+.att-badge-H  { background: #ede9fe; color: #5b21b6; }
+
+/* ─── Correction Request Styles ───────────────────────────────────────────────── */
+
+.correction-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--warning);
+  color: #fff;
+  font-size: .7rem;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.correction-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--warning);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: .75rem;
+  transition: box-shadow .15s;
+}
+.correction-card:hover { box-shadow: var(--shadow-md); }
+.correction-card.approved { border-left-color: var(--success); }
+.correction-card.rejected { border-left-color: var(--danger); }
+
+.correction-status {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: .72rem;
+  font-weight: 700;
+}
+.correction-status.pending  { background: #fef3c7; color: #92400e; }
+.correction-status.approved { background: #d1fae5; color: #065f46; }
+.correction-status.rejected { background: #fee2e2; color: #991b1b; }
+
+/* ─── Settings / Users View ───────────────────────────────────────────────────── */
+
+.users-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 1.5rem;
+}
+
+.users-card-header {
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+  color: #fff;
+  padding: .85rem 1.25rem;
+  border-radius: var(--radius) var(--radius) 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.users-card-header h2 { font-size: 1rem; font-weight: 600; margin: 0; }
+
+.role-admin    { background: #dbeafe; color: #1e40af; }
+.role-operator { background: #d1fae5; color: #065f46; }
+
+/* ─── Activity Log View ────────────────────────────────────────────────────────── */
+
+.activity-log-search {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.activity-log-search input {
+  padding: .4rem .75rem;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: .85rem;
+  outline: none;
+  width: 220px;
+}
+
+.activity-log-search input:focus { border-color: var(--primary); }
+
+/* ─── Operator Toast Container ─────────────────────────────────────────────────── */
+
+#opToastContainer {
+  position: fixed;
+  bottom: 1.2rem;
+  right: 1.2rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+
+/* ─── Production Stage Chips (extended) ────────────────────────────────────────── */
+
+.stage-chip.sewing-in  { background: #d1fae5; color: #065f46; }
+.stage-chip.sewing-out { background: #dcfce7; color: #15803d; }
+.stage-chip.finishing  { background: #f0fdf4; color: #166534; border: 1px solid #86efac; }
+.stage-chip.pending    { background: #f1f5f9; color: #475569; }
+
+/* ─── Responsive Additions ─────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .op-nav-btn span { display: none; }
+  .op-nav-btn i { font-size: 1.1rem; }
+  .op-content { padding: .75rem; }
+  .prod-stepper { gap: 0; }
+  .step-label { font-size: .6rem; }
+}

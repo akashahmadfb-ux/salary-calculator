@@ -35,6 +35,7 @@ try { getAnalytics(firebaseApp); } catch (e) { console.warn('Analytics initializ
 // ─── Auth State ────────────────────────────────────────────────────────────────
 let currentUser = null;
 let currentRole = null;
+let adminEmail   = null;   // pre-loaded admin email for password-only login
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
@@ -400,29 +401,28 @@ const app = {
   },
 
   async forgotPassword() {
-    const emailEl = document.getElementById('loginEmail');
-    const email = emailEl ? emailEl.value.trim() : '';
+    const email = adminEmail;
     if (!email) {
-      showToast('Please enter your email address first.', 'warning');
+      showToast('Admin account not configured. Please complete setup first.', 'warning');
       return;
     }
     try {
       await sendPasswordResetEmail(auth, email);
-      showToast('Password reset email sent! Check your inbox.', 'success');
+      showToast('Password reset email sent to the admin address!', 'success');
     } catch (err) {
-      showToast('Could not send reset email. Check the address and try again.', 'error');
+      showToast('Could not send reset email. Please try again.', 'error');
     }
   },
 
   async login(evt) {
     evt.preventDefault();
-    const email    = (document.getElementById('loginEmail')?.value || '').trim();
+    const email    = adminEmail;
     const password = document.getElementById('loginPassword').value;
     const errorEl  = document.getElementById('loginError');
     const btn      = document.getElementById('loginSubmitBtn');
 
     if (!email) {
-      if (errorEl) { errorEl.textContent = 'Please enter your email address.'; errorEl.style.display = 'flex'; }
+      if (errorEl) { errorEl.querySelector('span').textContent = 'Admin account not configured. Please complete setup first.'; errorEl.style.display = 'flex'; }
       return;
     }
 
@@ -434,9 +434,10 @@ const app = {
       // onAuthStateChanged will handle the rest
     } catch (err) {
       console.log("Login Error: ", err);
-      const msg = err.message || 'Login failed. Please check your credentials.';
-      if (errorEl) { errorEl.textContent = msg; errorEl.style.display = 'flex'; }
-      alert(msg);
+      let msg = 'Login failed. Please check your password.';
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') msg = 'Incorrect password. Please try again.';
+      if (err.code === 'auth/too-many-requests') msg = 'Too many failed attempts. Try again later.';
+      if (errorEl) { errorEl.querySelector('span').textContent = msg; errorEl.style.display = 'flex'; }
     } finally {
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-right-to-bracket"></i> Sign In'; }
     }
@@ -1868,6 +1869,24 @@ const app = {
 
   // ── First-Time Setup ────────────────────────────────────────────────────────
 
+  async _loadAdminEmail() {
+    try {
+      const snap = await get(ref(database, 'adminConfig/email'));
+      if (snap.exists()) {
+        adminEmail = snap.val();
+        const hint = document.getElementById('loginEmailHint');
+        if (hint) {
+          // Show masked email (e.g. a***@example.com) to confirm account without exposing it fully
+          const [local, domain] = adminEmail.split('@');
+          const masked = local.charAt(0) + '***@' + domain;
+          hint.textContent = masked;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load admin email config:', e);
+    }
+  },
+
   async _checkFirstTimeSetup() {
     try {
       const snap = await get(ref(database, 'setup_complete'));
@@ -1875,6 +1894,7 @@ const app = {
         this._showSetup(true);
         this._showLogin(false);
       } else {
+        await this._loadAdminEmail();
         this._showSetup(false);
         this._showLogin(true);
       }
@@ -1909,6 +1929,7 @@ const app = {
         email, role: 'admin', status: 'active',
         createdAt: Date.now(), lastLogin: Date.now(), mustChangePassword: false,
       });
+      await set(ref(database, 'adminConfig/email'), email);
       await set(ref(database, 'setup_complete'), true);
       this._showSetup(false);
       showToast('Admin account created! Welcome.', 'success');

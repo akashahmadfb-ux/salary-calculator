@@ -1910,14 +1910,19 @@ const app = {
         createdAt: Date.now(), lastLogin: Date.now(), mustChangePassword: false,
       });
       await set(ref(database, 'setup_complete'), true);
+      // Set role before bootstrapping so onAuthStateChanged doesn't race ahead
+      // with a null role and sign the user out.
+      currentRole = 'admin';
+      currentUser = cred.user;
       this._showSetup(false);
       showToast('Admin account created! Welcome.', 'success');
-      // onAuthStateChanged fires automatically
+      await this._bootstrapAfterAuth(cred.user);
     } catch (err) {
       let msg = 'Failed to create admin account.';
       if (err.code === 'auth/email-already-in-use') msg = 'That email is already in use.';
       if (err.code === 'auth/invalid-email')        msg = 'Invalid email address.';
       if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+      alert(err.message);
     } finally {
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-user-shield me-1"></i>Create Admin Account'; }
     }
@@ -2381,6 +2386,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 onAuthStateChanged(auth, async (user) => {
   if (user) {
+    // If createAdminAccount already set up the session, skip re-bootstrapping
+    // to avoid a double-bootstrap from the onAuthStateChanged race.
+    if (currentUser && currentUser.uid === user.uid && currentRole) return;
+
     currentUser = user;
     try {
       const snap = await get(ref(database, `${USERS_PATH}/${user.uid}/role`));

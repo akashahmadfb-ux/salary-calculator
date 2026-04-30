@@ -1,0 +1,5 @@
+{
+  "extends": "@ioknbo/config/typescript/expo",
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.d.ts", "expo-env.d.ts"],
+  "exclude": ["node_modules"]
+}

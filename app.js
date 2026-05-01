@@ -426,6 +426,11 @@ const app = {
       return;
     }
 
+    if (!password) {
+      if (errorEl) { errorEl.querySelector('span').textContent = 'Please enter your password.'; errorEl.style.display = 'flex'; }
+      return;
+    }
+
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in…'; }
     if (errorEl) errorEl.style.display = 'none';
 

@@ -1,0 +1,19 @@
+{
+  "name": "@ioknbo/web",
+  "version": "0.0.1",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start --web",
+    "build": "expo export --platform web",
+    "lint": "eslint app --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ioknbo/mobile": "*"
+  },
+  "devDependencies": {
+    "@ioknbo/config": "*",
+    "typescript": "^5.7.3"
+  }
+}

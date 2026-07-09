@@ -20,10 +20,39 @@ function splitPath(path = '') {
   return cleaned ? cleaned.split('/') : [];
 }
 
+function getStorageCipherKey() {
+  try {
+    const raw = localStorage.getItem(LOCAL_CREDENTIALS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed?.passwordHash || 'tracs-local-key';
+  } catch (_) {
+    return 'tracs-local-key';
+  }
+}
+
+function xorText(txt, key) {
+  let out = '';
+  for (let i = 0; i < txt.length; i++) {
+    out += String.fromCharCode(txt.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+  }
+  return out;
+}
+
+function encodeStoragePayload(value) {
+  const plain = JSON.stringify(value ?? {});
+  return btoa(xorText(plain, getStorageCipherKey()));
+}
+
+function decodeStoragePayload(raw) {
+  if (!raw) return {};
+  if (raw.trim().startsWith('{')) return JSON.parse(raw);
+  return JSON.parse(xorText(atob(raw), getStorageCipherKey()));
+}
+
 function loadLocalDb() {
   try {
     const raw = localStorage.getItem(LOCAL_DB_KEY);
-    return raw ? JSON.parse(raw) : {};
+    return raw ? decodeStoragePayload(raw) : {};
   } catch (_) {
     return {};
   }
@@ -33,7 +62,7 @@ let localDb = loadLocalDb();
 const localWatchers = [];
 
 function saveLocalDb() {
-  localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(localDb));
+  localStorage.setItem(LOCAL_DB_KEY, encodeStoragePayload(localDb));
 }
 
 function getPathValue(path = '') {

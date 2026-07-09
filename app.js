@@ -1,45 +1,226 @@
 /* app.js — TRACS APPAREL Management Web App */
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import { getAnalytics } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js';
-import { getDatabase, ref, set, push, get, child, update, onValue } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
-  updatePassword,
-  sendPasswordResetEmail,
-  createUserWithEmailAndPassword,
-  EmailAuthProvider,
-  reauthenticateWithCredential,
-} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 
-// ─── Firebase ─────────────────────────────────────────────────────────────────
+// ─── Local Database/Auth (Firebase-free mode) ─────────────────────────────────
 
-const firebaseConfig = {
-  apiKey: 'AIzaSyCXDUrJtkuJZ4BvqsYOFg9SIjOysIgkqtk',
-  authDomain: 'tracs-hr-mangment.firebaseapp.com',
-  projectId: 'tracs-hr-mangment',
-  storageBucket: 'tracs-hr-mangment.firebasestorage.app',
-  messagingSenderId: '1094008024729',
-  appId: '1:1094008024729:web:11f1afa99df6272cee9208',
-  measurementId: 'G-6ZD2M74F0P',
-  databaseURL: 'https://tracs-hr-mangment-default-rtdb.firebaseio.com',
-};
+const LOCAL_DB_KEY = 'tracs_local_db_v1';
+const LOCAL_CREDENTIALS_KEY = 'tracs_local_credentials_v1';
+const LOCAL_SESSION_KEY = 'tracs_local_session_v1';
+const USERS_ROOT_PATH = 'users';
 
+function cloneJSON(val) {
+  return val === undefined ? undefined : JSON.parse(JSON.stringify(val));
+}
+
+function normalizePath(path = '') {
+  return String(path).replace(/^\/+|\/+$/g, '');
+}
+
+function splitPath(path = '') {
+  const cleaned = normalizePath(path);
+  return cleaned ? cleaned.split('/') : [];
+}
+
+function loadLocalDb() {
+  try {
+    const raw = localStorage.getItem(LOCAL_DB_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+let localDb = loadLocalDb();
+const localWatchers = [];
+
+function saveLocalDb() {
+  localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(localDb));
+}
+
+function getPathValue(path = '') {
+  const parts = splitPath(path);
+  let cursor = localDb;
+  for (const p of parts) {
+    if (!cursor || typeof cursor !== 'object' || !(p in cursor)) return undefined;
+    cursor = cursor[p];
+  }
+  return cursor;
+}
+
+function setPathValue(path, value) {
+  const parts = splitPath(path);
+  if (!parts.length) {
+    localDb = value && typeof value === 'object' ? value : {};
+    return;
+  }
+  let cursor = localDb;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i];
+    if (!cursor[key] || typeof cursor[key] !== 'object') cursor[key] = {};
+    cursor = cursor[key];
+  }
+  const leaf = parts[parts.length - 1];
+  if (value === null) delete cursor[leaf];
+  else cursor[leaf] = value;
+}
+
+function mergePathValue(path, partial) {
+  const current = getPathValue(path);
+  const base = current && typeof current === 'object' ? current : {};
+  setPathValue(path, { ...base, ...partial });
+}
+
+function pathMatches(watchPath, changedPath) {
+  if (!watchPath || !changedPath) return true;
+  return (
+    watchPath === changedPath ||
+    watchPath.startsWith(`${changedPath}/`) ||
+    changedPath.startsWith(`${watchPath}/`)
+  );
+}
+
+function createSnapshot(value) {
+  return {
+    exists: () => value !== undefined && value !== null,
+    val: () => cloneJSON(value),
+  };
+}
+
+function notifyLocalWatchers(changedPath = '') {
+  localWatchers.forEach(({ path, cb }) => {
+    if (!pathMatches(path, changedPath)) return;
+    cb(createSnapshot(getPathValue(path)));
+  });
+}
+
+function initializeApp(config, name = 'default') {
+  return { config, name };
+}
+
+function getAnalytics() {
+  return null;
+}
+
+function getDatabase() {
+  return { type: 'local-db' };
+}
+
+function ref(_db, path = '') {
+  return { path: normalizePath(path) };
+}
+
+function child(parentRef, childPath) {
+  const base = normalizePath(parentRef?.path || '');
+  const next = normalizePath(childPath || '');
+  return { path: [base, next].filter(Boolean).join('/') };
+}
+
+async function get(refObj) {
+  return createSnapshot(getPathValue(refObj?.path || ''));
+}
+
+async function set(refObj, value) {
+  setPathValue(refObj?.path || '', cloneJSON(value));
+  saveLocalDb();
+  notifyLocalWatchers(refObj?.path || '');
+}
+
+async function update(refObj, partial) {
+  mergePathValue(refObj?.path || '', cloneJSON(partial || {}));
+  saveLocalDb();
+  notifyLocalWatchers(refObj?.path || '');
+}
+
+function push(refObj, value) {
+  const key = uid();
+  if (arguments.length > 1) {
+    set({ path: [normalizePath(refObj?.path || ''), key].filter(Boolean).join('/') }, value);
+  }
+  return { key };
+}
+
+function onValue(refObj, callback) {
+  const watcher = { path: normalizePath(refObj?.path || ''), cb: callback };
+  localWatchers.push(watcher);
+  callback(createSnapshot(getPathValue(watcher.path)));
+  return () => {
+    const idx = localWatchers.indexOf(watcher);
+    if (idx >= 0) localWatchers.splice(idx, 1);
+  };
+}
+
+function getLocalCredentials() {
+  try {
+    const raw = localStorage.getItem(LOCAL_CREDENTIALS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.id && parsed.password) return parsed;
+    }
+  } catch (_) {}
+  const fallback = { id: 'Akash21', password: 'Akash21#' };
+  localStorage.setItem(LOCAL_CREDENTIALS_KEY, JSON.stringify(fallback));
+  return fallback;
+}
+
+function setLocalCredentials(id, password) {
+  localStorage.setItem(LOCAL_CREDENTIALS_KEY, JSON.stringify({ id, password }));
+}
+
+const authStateSubscribers = [];
+
+function getAuth() {
+  return { currentUser: null };
+}
+
+function onAuthStateChanged(_auth, cb) {
+  authStateSubscribers.push(cb);
+  cb(auth.currentUser);
+}
+
+function notifyAuthState() {
+  authStateSubscribers.forEach(cb => cb(auth.currentUser));
+}
+
+async function signOut(authInstance) {
+  if (authInstance) authInstance.currentUser = null;
+  if (authInstance === auth) {
+    localStorage.removeItem(LOCAL_SESSION_KEY);
+    notifyAuthState();
+  }
+}
+
+async function sendPasswordResetEmail() {
+  return true;
+}
+
+async function updatePassword(user, newPass) {
+  if (!user) throw new Error('No logged in user');
+  const creds = getLocalCredentials();
+  if (creds.id === user.id) setLocalCredentials(creds.id, newPass);
+}
+
+async function createUserWithEmailAndPassword(authInstance, email, _pass) {
+  const users = getPathValue(USERS_ROOT_PATH) || {};
+  const exists = Object.values(users).some(u => (u?.email || '').toLowerCase() === String(email).toLowerCase());
+  if (exists) {
+    const err = new Error('Email already in use');
+    err.code = 'auth/email-already-in-use';
+    throw err;
+  }
+  const user = { uid: uid(), email };
+  if (authInstance) authInstance.currentUser = user;
+  return { user };
+}
+
+const firebaseConfig = {};
 const firebaseApp = initializeApp(firebaseConfig);
 const database = getDatabase(firebaseApp);
 const auth = getAuth(firebaseApp);
-try { getAnalytics(firebaseApp); } catch (e) { console.warn('Analytics initialization failed:', e); }
 
 // ─── Auth State ────────────────────────────────────────────────────────────────
 let currentUser = null;
 let currentRole = null;
-let adminEmail   = null;   // pre-loaded admin email for password-only login
+let adminEmail   = null;
 let localAdminSession = false;
-
-const ADMIN_USERNAME = 'Akash21';
-const ADMIN_PASSWORD = 'Akash21#';
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
@@ -73,6 +254,31 @@ function defaultData() {
   return { companyName: 'TRACS APPAREL', employees: [], salaryRecords: [], attendance: {} };
 }
 
+function ensureLocalDbDefaults() {
+  const creds = getLocalCredentials();
+  const users = getPathValue(USERS_PATH);
+  if (!users || typeof users !== 'object' || !Object.keys(users).length) {
+    setPathValue(USERS_PATH, {
+      'local-admin': {
+        email: `${creds.id}@local`,
+        role: 'admin',
+        status: 'active',
+        createdAt: Date.now(),
+        lastLogin: null,
+        mustChangePassword: false,
+      },
+    });
+  }
+  if (getPathValue('setup_complete') !== true) setPathValue('setup_complete', true);
+  if (!getPathValue('adminConfig/email')) setPathValue('adminConfig/email', creds.id);
+  if (!getPathValue(DATA_PATH)) setPathValue(DATA_PATH, defaultData());
+  if (!getPathValue(PROD_PATH)) setPathValue(PROD_PATH, {});
+  if (!getPathValue(ACTIVITY_PATH)) setPathValue(ACTIVITY_PATH, {});
+  if (!getPathValue(ATTENDANCE_PATH)) setPathValue(ATTENDANCE_PATH, {});
+  if (!getPathValue(CORRECTION_PATH)) setPathValue(CORRECTION_PATH, {});
+  saveLocalDb();
+}
+
 function cloneData(data) {
   return JSON.parse(JSON.stringify(data));
 }
@@ -93,6 +299,7 @@ function getNextSalaryRecordId() {
 }
 
 async function loadDataFromCloud() {
+  ensureLocalDbDefaults();
   const rootRef = ref(database);
   const snap = await get(child(rootRef, DATA_PATH));
   if (snap.exists()) {
@@ -113,8 +320,8 @@ async function saveData(data) {
     await set(ref(database, DATA_PATH), dataCache);
     return true;
   } catch (e) {
-    console.error('Failed to save data to Firebase Realtime Database:', e);
-    showToast('Cloud save failed. Please try again.', 'error');
+    console.error('Failed to save local data:', e);
+    showToast('Local save failed. Please try again.', 'error');
     return false;
   }
 }
@@ -236,7 +443,7 @@ function showToast(msg, type = 'success') {
   t._timer = setTimeout(() => t.classList.remove('show'), 3200);
 }
 
-// Compress & resize image to ≤200px for faster cloud sync
+// Compress & resize image to ≤200px for faster local storage
 function compressImage(dataUrl, cb) {
   const img = new Image();
   img.onload = () => {
@@ -323,7 +530,9 @@ const app = {
 
     this._setAppAccess(false);
     this._hideOperatorShell();
-    // Auth state is managed by onAuthStateChanged at the bottom of this module
+    this._showSetup(false);
+    this._showChangePassword(false);
+    await this._checkFirstTimeSetup();
   },
 
   _syncCompanyNameInput() {
@@ -372,10 +581,14 @@ const app = {
   _applyAuthHeader(isLoggedIn) {
     const badge = document.getElementById('authUserBadge');
     const logoutBtn = document.getElementById('logoutBtn');
+    const backupBtn = document.getElementById('backupDownloadBtn');
+    const restoreBtn = document.getElementById('backupRestoreBtn');
     if (!badge || !logoutBtn) return;
     if (!isLoggedIn) {
       badge.style.display = 'none';
       logoutBtn.style.display = 'none';
+      if (backupBtn) backupBtn.style.display = 'none';
+      if (restoreBtn) restoreBtn.style.display = 'none';
       return;
     }
     const roleLabel = currentRole === 'operator' ? 'OPERATOR' : 'ADMIN';
@@ -383,6 +596,8 @@ const app = {
     badge.className = `auth-user-badge role-${currentRole || 'admin'}`;
     badge.style.display = 'inline-flex';
     logoutBtn.style.display = 'inline-flex';
+    if (backupBtn) backupBtn.style.display = 'inline-flex';
+    if (restoreBtn) restoreBtn.style.display = 'inline-flex';
   },
 
   _applyRoleBasedUI(role) {
@@ -405,17 +620,7 @@ const app = {
   },
 
   async forgotPassword() {
-    const email = adminEmail;
-    if (!email) {
-      showToast('Admin account not configured. Please complete setup first.', 'warning');
-      return;
-    }
-    try {
-      await sendPasswordResetEmail(auth, email);
-      showToast('Password reset email sent to the admin address!', 'success');
-    } catch (err) {
-      showToast('Could not send reset email. Please try again.', 'error');
-    }
+    showToast('Reset by opening a backup on another device or changing local credentials.', 'info');
   },
 
   async login(evt) {
@@ -427,7 +632,7 @@ const app = {
     const errorMsg = errorEl?.querySelector('span');
 
     if (!username || !password) {
-      if (errorEl && errorMsg) { errorMsg.textContent = 'Please enter username and password.'; errorEl.style.display = 'flex'; }
+      if (errorEl && errorMsg) { errorMsg.textContent = 'Please enter ID and password.'; errorEl.style.display = 'flex'; }
       return;
     }
 
@@ -435,18 +640,22 @@ const app = {
     if (errorEl) errorEl.style.display = 'none';
 
     try {
-      if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
+      const creds = getLocalCredentials();
+      if (username !== creds.id || password !== creds.password) {
         throw new Error('INVALID_LOCAL_LOGIN');
       }
       localAdminSession = true;
+      currentUser = { uid: 'local-admin', id: username, email: `${username}@local` };
+      auth.currentUser = currentUser;
       currentRole = 'admin';
+      localStorage.setItem(LOCAL_SESSION_KEY, 'admin');
       this._showLogin(false);
       this._showSetup(false);
       this._showChangePassword(false);
       await this._bootstrapLocalAdmin();
     } catch (err) {
       let msg = 'Login failed. Please check your password.';
-      if (err.message === 'INVALID_LOCAL_LOGIN') msg = 'Incorrect username or password. Please try again.';
+      if (err.message === 'INVALID_LOCAL_LOGIN') msg = 'Incorrect ID or password. Please try again.';
       if (errorEl && errorMsg) { errorMsg.textContent = msg; errorEl.style.display = 'flex'; }
     } finally {
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-right-to-bracket"></i> Sign In'; }
@@ -457,7 +666,7 @@ const app = {
     try {
       await loadDataFromCloud();
     } catch (err) {
-      console.warn('Cloud data load failed in local admin mode:', err);
+      console.warn('Local data load failed in admin mode:', err);
       dataCache = defaultData();
     }
     this._syncCompanyNameInput();
@@ -470,24 +679,69 @@ const app = {
   },
 
   async logout() {
-    if (localAdminSession) {
-      localAdminSession = false;
-      currentUser = null;
-      currentRole = null;
-      dataCache = defaultData();
-      this._applyAuthHeader(false);
-      this._setAppAccess(false);
-      this._hideOperatorShell();
-      this._showChangePassword(false);
-      await this._checkFirstTimeSetup();
-      return;
-    }
+    localAdminSession = false;
+    currentUser = null;
+    auth.currentUser = null;
+    currentRole = null;
+    dataCache = defaultData();
+    localStorage.removeItem(LOCAL_SESSION_KEY);
+    this._applyAuthHeader(false);
+    this._setAppAccess(false);
+    this._hideOperatorShell();
+    this._showChangePassword(false);
+    await this._checkFirstTimeSetup();
+  },
+
+  downloadBackup() {
     try {
-      await signOut(auth);
-    } catch (e) {
-      console.error('Logout failed:', e);
+      const payload = {
+        type: 'tracs-local-backup',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        credentials: getLocalCredentials(),
+        database: localDb,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tracs-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Backup file downloaded.', 'success');
+    } catch (err) {
+      console.error('Backup download failed:', err);
+      showToast('Failed to create backup file.', 'error');
     }
-    // onAuthStateChanged will handle UI reset
+  },
+
+  triggerRestorePicker() {
+    const input = document.getElementById('backupRestoreInput');
+    if (input) input.click();
+  },
+
+  async restoreBackupFromFile(evt) {
+    const file = evt?.target?.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (!parsed || parsed.type !== 'tracs-local-backup' || typeof parsed.database !== 'object') {
+        throw new Error('INVALID_BACKUP_FILE');
+      }
+      localDb = cloneJSON(parsed.database) || {};
+      saveLocalDb();
+      if (parsed.credentials?.id && parsed.credentials?.password) {
+        setLocalCredentials(parsed.credentials.id, parsed.credentials.password);
+      }
+      showToast('Backup restored successfully. Reloading…', 'success');
+      setTimeout(() => window.location.reload(), 700);
+    } catch (err) {
+      console.error('Backup restore failed:', err);
+      showToast('Invalid backup file. Please upload a valid TRACS backup.', 'error');
+    } finally {
+      evt.target.value = '';
+    }
   },
 
   navigateTo(view) {
@@ -1908,30 +2162,28 @@ const app = {
   // ── First-Time Setup ────────────────────────────────────────────────────────
 
   async _loadAdminEmail() {
-    try {
-      const snap = await get(ref(database, 'adminConfig/email'));
-      if (snap.exists()) {
-        adminEmail = snap.val();
-      }
-    } catch (e) {
-      console.warn('Could not load admin email config:', e);
-    }
+    const creds = getLocalCredentials();
+    adminEmail = creds.id;
+    const hint = document.getElementById('loginEmailHint');
+    if (hint) hint.textContent = creds.id;
   },
 
   async _checkFirstTimeSetup() {
-    try {
-      const snap = await get(ref(database, 'setup_complete'));
-      if (!snap.exists() || snap.val() !== true) {
-        this._showSetup(false);
-        this._showLogin(true);
-      } else {
-        await this._loadAdminEmail();
-        this._showSetup(false);
-        this._showLogin(true);
-      }
-    } catch (e) {
-      this._showLogin(true);
+    ensureLocalDbDefaults();
+    await this._loadAdminEmail();
+    if (localStorage.getItem(LOCAL_SESSION_KEY) === 'admin') {
+      localAdminSession = true;
+      currentRole = 'admin';
+      currentUser = { uid: 'local-admin', id: adminEmail, email: `${adminEmail}@local` };
+      auth.currentUser = currentUser;
+      this._showLogin(false);
+      this._showChangePassword(false);
+      await this._bootstrapLocalAdmin();
+      return;
     }
+    this._showSetup(false);
+    this._showChangePassword(false);
+    this._showLogin(true);
   },
 
   async createAdminAccount(evt) {
@@ -2429,49 +2681,4 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// ─── Firebase Auth State Listener ─────────────────────────────────────────────
-
-onAuthStateChanged(auth, async (user) => {
-  if (user) {
-    currentUser = user;
-    try {
-      const snap = await get(ref(database, `${USERS_PATH}/${user.uid}/role`));
-      currentRole = snap.exists() ? snap.val() : null;
-
-      if (!currentRole) {
-        // No role assigned — sign out
-        showToast('Your account has no role assigned. Contact the admin.', 'error');
-        await signOut(auth);
-        return;
-      }
-
-      // Check must-change-password flag
-      const mustSnap = await get(ref(database, `${USERS_PATH}/${user.uid}/mustChangePassword`));
-      if (mustSnap.val() === true) {
-        app._showLogin(false);
-        app._setAppAccess(false);
-        app._hideOperatorShell();
-        app._showChangePassword(true);
-        return;
-      }
-
-      app._showLogin(false);
-      app._showChangePassword(false);
-      await app._bootstrapAfterAuth(user);
-    } catch (err) {
-      console.error('Auth state handling failed:', err);
-      showToast('Error loading account. Please try again.', 'error');
-      await signOut(auth);
-    }
-  } else {
-    currentUser = null;
-    currentRole = null;
-    dataCache = defaultData();
-    app._applyAuthHeader(false);
-    app._setAppAccess(false);
-    app._hideOperatorShell();
-    app._showChangePassword(false);
-    // Check first-time setup
-    await app._checkFirstTimeSetup();
-  }
-});
+// Local session boot is handled in app.init() via _checkFirstTimeSetup().

@@ -1089,15 +1089,22 @@
         <div class="form-group" style="margin-bottom:14px;text-align:center">
           <div style="display:inline-flex;align-items:center;gap:6px;background:var(--sidebar-bg,#1a2e44);color:rgba(255,255,255,.75);border-radius:20px;padding:.3rem .9rem;font-size:.8rem;letter-spacing:.3px">
             <i class="fas fa-user-shield" style="color:var(--accent,#4fc3f7)"></i>
-            Admin &mdash; <span id="loginEmailHint" style="opacity:.9;font-style:italic">configured</span>
+            Admin &mdash; <span id="loginEmailHint" style="opacity:.9;font-style:italic">Akash21</span>
           </div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label style="font-weight:600;margin-bottom:6px;display:block">
+            <i class="fas fa-user me-1" style="color:var(--primary)"></i>Username
+          </label>
+          <input type="text" id="loginUsername" placeholder="Enter username" required
+                 autocomplete="username" class="login-email-input">
         </div>
         <div class="form-group" style="margin-bottom:18px">
           <label style="font-weight:600;margin-bottom:6px;display:block">
-            <i class="fas fa-lock me-1" style="color:var(--primary)"></i>Admin Password
+            <i class="fas fa-lock me-1" style="color:var(--primary)"></i>Password
           </label>
           <div class="login-password-wrap">
-            <input type="password" id="loginPassword" placeholder="Enter admin password"
+            <input type="password" id="loginPassword" placeholder="Enter password"
                    required autocomplete="current-password" class="login-password-input">
             <button type="button" class="login-eye-btn" id="loginEyeBtn"
                     onclick="app.toggleLoginPassword()" aria-label="Toggle password visibility">

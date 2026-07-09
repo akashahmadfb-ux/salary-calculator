@@ -153,16 +153,35 @@ function getLocalCredentials() {
     const raw = localStorage.getItem(LOCAL_CREDENTIALS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.id && parsed.password) return parsed;
+      if (parsed && parsed.id && parsed.passwordHash) return parsed;
+      if (parsed && parsed.id && parsed.password) {
+        const migrated = { id: parsed.id, passwordHash: hashPassword(parsed.password) };
+        localStorage.setItem(LOCAL_CREDENTIALS_KEY, JSON.stringify(migrated));
+        return migrated;
+      }
     }
   } catch (_) {}
-  const fallback = { id: 'Akash21', password: 'Akash21#' };
+  const fallback = { id: 'Akash21', passwordHash: hashPassword('Akash21#') };
   localStorage.setItem(LOCAL_CREDENTIALS_KEY, JSON.stringify(fallback));
   return fallback;
 }
 
 function setLocalCredentials(id, password) {
-  localStorage.setItem(LOCAL_CREDENTIALS_KEY, JSON.stringify({ id, password }));
+  localStorage.setItem(LOCAL_CREDENTIALS_KEY, JSON.stringify({ id, passwordHash: hashPassword(password) }));
+}
+
+function hashPassword(value) {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  const txt = String(value || '');
+  for (let i = 0; i < txt.length; i++) {
+    const c = txt.charCodeAt(i);
+    h1 ^= c;
+    h1 = Math.imul(h1, 0x01000193);
+    h2 ^= c;
+    h2 = Math.imul(h2, 0x27d4eb2d);
+  }
+  return `${(h1 >>> 0).toString(16)}${(h2 >>> 0).toString(16)}`;
 }
 
 const authStateSubscribers = [];
@@ -418,7 +437,9 @@ function getLast6Months() {
 }
 
 function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const bytes = new Uint32Array(2);
+  crypto.getRandomValues(bytes);
+  return `${Date.now().toString(36)}${bytes[0].toString(36)}${bytes[1].toString(36)}`;
 }
 
 function initials(name) {
@@ -641,7 +662,7 @@ const app = {
 
     try {
       const creds = getLocalCredentials();
-      if (username !== creds.id || password !== creds.password) {
+      if (username !== creds.id || hashPassword(password) !== creds.passwordHash) {
         throw new Error('INVALID_LOCAL_LOGIN');
       }
       localAdminSession = true;
@@ -731,7 +752,12 @@ const app = {
       }
       localDb = cloneJSON(parsed.database) || {};
       saveLocalDb();
-      if (parsed.credentials?.id && parsed.credentials?.password) {
+      if (parsed.credentials?.id && parsed.credentials?.passwordHash) {
+        localStorage.setItem(LOCAL_CREDENTIALS_KEY, JSON.stringify({
+          id: parsed.credentials.id,
+          passwordHash: parsed.credentials.passwordHash,
+        }));
+      } else if (parsed.credentials?.id && parsed.credentials?.password) {
         setLocalCredentials(parsed.credentials.id, parsed.credentials.password);
       }
       showToast('Backup restored successfully. Reloading…', 'success');

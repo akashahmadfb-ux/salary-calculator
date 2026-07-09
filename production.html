@@ -429,9 +429,9 @@
     </div>
 
     <div class="mb-3">
-      <label class="form-label" for="loginEmail"><i class="fas fa-envelope me-1"></i>Gmail Address</label>
-      <input type="email" class="form-control" id="loginEmail" placeholder="you@gmail.com"
-             autocomplete="email" required>
+      <label class="form-label" for="loginEmail"><i class="fas fa-user me-1"></i>Username or Gmail</label>
+      <input type="text" class="form-control" id="loginEmail" placeholder="username or you@gmail.com"
+             autocomplete="username" required>
     </div>
 
     <div class="mb-4">
@@ -797,15 +797,21 @@
   // ── prodApp public API ────────────────────────────────────────────────────
   window.prodApp = {
 
-    /** Login with email + password */
+    /** Login with username/email + password */
     async login() {
-      const email    = document.getElementById('loginEmail').value.trim();
+      const loginId  = document.getElementById('loginEmail').value.trim().toLowerCase();
+      const email    = loginId.includes('@') ? loginId : `${loginId}@gmail.com`;
       const password = document.getElementById('loginPassword').value;
       const errBox   = document.getElementById('loginError');
       const errMsg   = document.getElementById('loginErrorMsg');
       const btn      = document.getElementById('loginBtn');
 
       errBox.style.display = 'none';
+      if (!loginId || !password) {
+        errMsg.textContent = 'Username/Gmail and password are required.';
+        errBox.style.display = 'block';
+        return;
+      }
       btn.disabled = true;
       btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Signing in…';
 

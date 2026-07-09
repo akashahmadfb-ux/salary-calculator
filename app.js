@@ -36,6 +36,10 @@ try { getAnalytics(firebaseApp); } catch (e) { console.warn('Analytics initializ
 let currentUser = null;
 let currentRole = null;
 let adminEmail   = null;   // pre-loaded admin email for password-only login
+let localAdminSession = false;
+
+const ADMIN_USERNAME = 'Akash21';
+const ADMIN_PASSWORD = 'Akash21#';
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
@@ -416,18 +420,14 @@ const app = {
 
   async login(evt) {
     evt.preventDefault();
-    const email    = adminEmail;
+    const username = (document.getElementById('loginUsername')?.value || '').trim();
     const password = document.getElementById('loginPassword').value;
     const errorEl  = document.getElementById('loginError');
     const btn      = document.getElementById('loginSubmitBtn');
+    const errorMsg = errorEl?.querySelector('span');
 
-    if (!email) {
-      if (errorEl) { errorEl.querySelector('span').textContent = 'Admin account not configured. Please complete setup first.'; errorEl.style.display = 'flex'; }
-      return;
-    }
-
-    if (!password) {
-      if (errorEl) { errorEl.querySelector('span').textContent = 'Please enter your password.'; errorEl.style.display = 'flex'; }
+    if (!username || !password) {
+      if (errorEl && errorMsg) { errorMsg.textContent = 'Please enter username and password.'; errorEl.style.display = 'flex'; }
       return;
     }
 
@@ -435,20 +435,53 @@ const app = {
     if (errorEl) errorEl.style.display = 'none';
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      // onAuthStateChanged will handle the rest
+      if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
+        throw new Error('INVALID_LOCAL_LOGIN');
+      }
+      localAdminSession = true;
+      currentRole = 'admin';
+      this._showLogin(false);
+      this._showSetup(false);
+      this._showChangePassword(false);
+      await this._bootstrapLocalAdmin();
     } catch (err) {
-      console.log("Login Error: ", err);
       let msg = 'Login failed. Please check your password.';
-      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') msg = 'Incorrect password. Please try again.';
-      if (err.code === 'auth/too-many-requests') msg = 'Too many failed attempts. Try again later.';
-      if (errorEl) { errorEl.querySelector('span').textContent = msg; errorEl.style.display = 'flex'; }
+      if (err.message === 'INVALID_LOCAL_LOGIN') msg = 'Incorrect username or password. Please try again.';
+      if (errorEl && errorMsg) { errorMsg.textContent = msg; errorEl.style.display = 'flex'; }
     } finally {
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-right-to-bracket"></i> Sign In'; }
     }
   },
 
+  async _bootstrapLocalAdmin() {
+    try {
+      await loadDataFromCloud();
+    } catch (err) {
+      console.warn('Cloud data load failed in local admin mode:', err);
+      dataCache = defaultData();
+    }
+    this._syncCompanyNameInput();
+    this._setAppAccess(true);
+    this._hideOperatorShell();
+    this._applyAuthHeader(true);
+    this._applyRoleBasedUI('admin');
+    this.navigateTo('dashboard');
+    showToast('Welcome back, Admin!', 'success');
+  },
+
   async logout() {
+    if (localAdminSession) {
+      localAdminSession = false;
+      currentUser = null;
+      currentRole = null;
+      dataCache = defaultData();
+      this._applyAuthHeader(false);
+      this._setAppAccess(false);
+      this._hideOperatorShell();
+      this._showChangePassword(false);
+      await this._checkFirstTimeSetup();
+      return;
+    }
     try {
       await signOut(auth);
     } catch (e) {
@@ -1879,13 +1912,6 @@ const app = {
       const snap = await get(ref(database, 'adminConfig/email'));
       if (snap.exists()) {
         adminEmail = snap.val();
-        const hint = document.getElementById('loginEmailHint');
-        if (hint) {
-          // Show masked email (e.g. a***@example.com) to confirm account without exposing it fully
-          const [local, domain] = adminEmail.split('@');
-          const masked = local.charAt(0) + '***@' + domain;
-          hint.textContent = masked;
-        }
       }
     } catch (e) {
       console.warn('Could not load admin email config:', e);
@@ -1896,8 +1922,8 @@ const app = {
     try {
       const snap = await get(ref(database, 'setup_complete'));
       if (!snap.exists() || snap.val() !== true) {
-        this._showSetup(true);
-        this._showLogin(false);
+        this._showSetup(false);
+        this._showLogin(true);
       } else {
         await this._loadAdminEmail();
         this._showSetup(false);

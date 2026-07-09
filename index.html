@@ -210,6 +210,13 @@
       <div class="top-header-right">
         <span class="current-date" id="currentDate"></span>
         <span class="auth-user-badge" id="authUserBadge" style="display:none"></span>
+        <button class="btn btn-outline-primary btn-sm" id="backupDownloadBtn" style="display:none" onclick="app.downloadBackup()">
+          <i class="fas fa-download"></i> Backup
+        </button>
+        <button class="btn btn-outline-primary btn-sm" id="backupRestoreBtn" style="display:none" onclick="app.triggerRestorePicker()">
+          <i class="fas fa-upload"></i> Restore
+        </button>
+        <input type="file" id="backupRestoreInput" accept=".json,application/json" style="display:none" onchange="app.restoreBackupFromFile(event)">
         <button class="btn btn-secondary btn-sm" id="logoutBtn" style="display:none" onclick="app.logout()">
           <i class="fas fa-sign-out-alt"></i> Logout
         </button>
@@ -1089,14 +1096,14 @@
         <div class="form-group" style="margin-bottom:14px;text-align:center">
           <div style="display:inline-flex;align-items:center;gap:6px;background:var(--sidebar-bg,#1a2e44);color:rgba(255,255,255,.75);border-radius:20px;padding:.3rem .9rem;font-size:.8rem;letter-spacing:.3px">
             <i class="fas fa-user-shield" style="color:var(--accent,#4fc3f7)"></i>
-            Admin &mdash; <span id="loginEmailHint" style="opacity:.9;font-style:italic">Akash21</span>
+            Local Admin &mdash; <span id="loginEmailHint" style="opacity:.9;font-style:italic">Akash21</span>
           </div>
         </div>
         <div class="form-group" style="margin-bottom:12px">
           <label style="font-weight:600;margin-bottom:6px;display:block">
-            <i class="fas fa-user me-1" style="color:var(--primary)"></i>Username
+            <i class="fas fa-id-card me-1" style="color:var(--primary)"></i>ID
           </label>
-          <input type="text" id="loginUsername" placeholder="Enter username" required
+          <input type="text" id="loginUsername" placeholder="Enter ID" required
                  autocomplete="username" class="login-email-input">
         </div>
         <div class="form-group" style="margin-bottom:18px">
@@ -1118,12 +1125,8 @@
         <button type="submit" id="loginSubmitBtn" class="btn btn-primary login-submit-btn">
           <i class="fas fa-right-to-bracket"></i> Sign In
         </button>
-        <div class="text-center mt-2">
-          <button type="button" class="btn btn-link btn-sm p-0" style="font-size:.8rem;color:var(--primary)"
-                  onclick="app.forgotPassword()">Forgot Password?</button>
-        </div>
       </form>
-      <div class="login-footer">TRACS APPAREL v2.0 &mdash; Secured by Firebase</div>
+      <div class="login-footer">TRACS APPAREL v2.0 &mdash; Local Storage Mode</div>
     </div>
   </div>
 
